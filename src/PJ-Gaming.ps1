@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $script:StateFile = $null
 $script:UserSid = $null
 $script:OutputBox = $null
+$script:EmbeddedVideoReview = '' # PJ_EMBED_VIDEO_REVIEW
 
 function Write-Activity([string]$Message) {
     $line = ('[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $Message)
@@ -31,18 +32,47 @@ function Get-TweakCatalog {
         [pscustomobject]@{ Id='lockscreen-spotlight'; Group='Appearance'; Label='Lock-screen Spotlight rotation OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='RotatingLockScreenEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='lockscreen-overlay'; Group='Appearance'; Label='Lock-screen Spotlight tips OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='RotatingLockScreenOverlayEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='lockscreen-tips'; Group='Appearance'; Label='Lock-screen fun facts and suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-338387Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='advertising-id'; Group='Privacy'; Label='Advertising ID OFF'; Path='Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo'; Name='Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='tailored-experiences'; Group='Privacy'; Label='Tailored diagnostic recommendations OFF'; Path='Software\Microsoft\Windows\CurrentVersion\Privacy'; Name='TailoredExperiencesWithDiagnosticDataEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='settings-suggestions'; Group='Privacy'; Label='Windows Settings suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-338393Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='settings-suggestions-secondary'; Group='Privacy'; Label='Additional Settings suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-353694Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='settings-suggestions-tertiary'; Group='Privacy'; Label='Settings content suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-353696Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='windows-welcome'; Group='Privacy'; Label='Post-update welcome suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-310093Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='windows-tips'; Group='Privacy'; Label='Windows tips content OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-338389Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='windows-soft-landing'; Group='Privacy'; Label='Windows tips and suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SoftLandingEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='finish-setup'; Group='Privacy'; Label='Finish-setting-up prompts OFF'; Path='Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement'; Name='ScoobeSystemSettingEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='search-history'; Group='Privacy'; Label='New device search-history recording OFF'; Path='Software\Microsoft\Windows\CurrentVersion\SearchSettings'; Name='IsDeviceSearchHistoryEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='personal-cloud-search'; Group='Privacy'; Label='Personal Microsoft-account cloud search OFF'; Path='Software\Microsoft\Windows\CurrentVersion\SearchSettings'; Name='IsMSACloudSearchEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='work-cloud-search'; Group='Privacy'; Label='Work/school cloud search OFF'; Path='Software\Microsoft\Windows\CurrentVersion\SearchSettings'; Name='IsAADCloudSearchEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='search-highlights'; Group='Privacy'; Label='Search highlights OFF'; Path='Software\Microsoft\Windows\CurrentVersion\SearchSettings'; Name='IsDynamicSearchBoxEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='toast-notifications'; Group='Notifications'; Label='App toast notifications OFF (important alerts may be missed)'; Path='Software\Microsoft\Windows\CurrentVersion\PushNotifications'; Name='ToastEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='mouse-acceleration'; Group='Mouse'; Label='Enhanced pointer precision OFF'; Path='Control Panel\Mouse'; Name='MouseSpeed'; Kind='String'; Data='0' },
+        [pscustomobject]@{ Id='mouse-threshold-one'; Group='Mouse'; Label='Pointer acceleration threshold 1 OFF'; Path='Control Panel\Mouse'; Name='MouseThreshold1'; Kind='String'; Data='0' },
+        [pscustomobject]@{ Id='mouse-threshold-two'; Group='Mouse'; Label='Pointer acceleration threshold 2 OFF'; Path='Control Panel\Mouse'; Name='MouseThreshold2'; Kind='String'; Data='0' },
         [pscustomobject]@{ Id='chrome-background'; Group='Browsers'; Label='Chrome background apps'; Path='Software\Policies\Google\Chrome'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-background'; Group='Browsers'; Label='Edge background apps'; Path='Software\Policies\Microsoft\Edge'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-startup'; Group='Browsers'; Label='Edge Startup Boost'; Path='Software\Policies\Microsoft\Edge'; Name='StartupBoostEnabled'; Kind='DWord'; Data=0 }
     )
 }
 
-function Get-SelectedTweaks([bool]$Gaming, [bool]$Appearance, [bool]$Browsers) {
+function Get-SelectedTweaks([bool]$Gaming, [bool]$Appearance, [bool]$Browsers,
+    [bool]$Privacy=$false, [bool]$Notifications=$false, [bool]$Mouse=$false) {
     Get-TweakCatalog | Where-Object {
         (($_.Group -eq 'Gaming') -and $Gaming) -or
         (($_.Group -eq 'Appearance') -and $Appearance) -or
-        (($_.Group -eq 'Browsers') -and $Browsers)
+        (($_.Group -eq 'Browsers') -and $Browsers) -or
+        (($_.Group -eq 'Privacy') -and $Privacy) -or
+        (($_.Group -eq 'Notifications') -and $Notifications) -or
+        (($_.Group -eq 'Mouse') -and $Mouse)
     }
+}
+
+function Get-VideoReviewText {
+    if (-not [string]::IsNullOrEmpty($script:EmbeddedVideoReview)) {
+        return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($script:EmbeddedVideoReview))
+    }
+    # Developer source reads the same document that the builder embeds offline.
+    return [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../docs/video-review.md'))
 }
 
 function Get-RegistryState([string]$Path, [string]$Name, [switch]$Machine) {
@@ -268,6 +298,17 @@ function Get-SystemReport {
         foreach ($cpu in @(Get-CimInstance Win32_Processor)) { $lines += ('CPU: ' + $cpu.Name) }
         foreach ($gpu in @(Get-CimInstance Win32_VideoController)) { $lines += ('GPU: {0}; driver {1}; reported display {2}x{3} @ {4} Hz' -f $gpu.Name, $gpu.DriverVersion, $gpu.CurrentHorizontalResolution, $gpu.CurrentVerticalResolution, $gpu.CurrentRefreshRate) }
     } catch { $lines += ('Hardware query unavailable: ' + $_.Exception.Message) }
+    try {
+        foreach ($board in @(Get-CimInstance Win32_BaseBoard)) {
+            $lines += ('Motherboard: {0} {1}; revision {2}' -f $board.Manufacturer, $board.Product, $board.Version)
+        }
+        foreach ($bios in @(Get-CimInstance Win32_BIOS)) {
+            $lines += ('BIOS: {0}; released {1}' -f $bios.SMBIOSBIOSVersion, $bios.ReleaseDate)
+        }
+        foreach ($memory in @(Get-CimInstance Win32_PhysicalMemory)) {
+            $lines += ('RAM module: {0:N1} GB; configured speed reported {1}; rated speed reported {2}' -f ($memory.Capacity / 1GB), $memory.ConfiguredClockSpeed, $memory.Speed)
+        }
+    } catch { $lines += ('Motherboard/BIOS/RAM detail unavailable: ' + $_.Exception.Message) }
     try { $lines += ('Power plan: ' + (Get-ActivePowerPlan)) } catch { $lines += $_.Exception.Message }
     $lines += @('', 'Physical network adapters (read-only; no addresses collected):')
     try {
@@ -275,6 +316,11 @@ function Get-SystemReport {
             $lines += ('Adapter: {0}; state: {1}; link speed: {2}' -f $adapter.InterfaceDescription, $adapter.Status, $adapter.LinkSpeed)
         }
     } catch { $lines += ('Adapter report unavailable: ' + $_.Exception.Message) }
+    try {
+        foreach ($driver in @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='NET'")) {
+            $lines += ('Network driver: {0}; provider {1}; version {2}; date {3}' -f $driver.DeviceName, $driver.DriverProviderName, $driver.DriverVersion, $driver.DriverDate)
+        }
+    } catch { $lines += ('Network driver report unavailable: ' + $_.Exception.Message) }
     $lines += @('', 'No IP/MAC addresses, Wi-Fi names, identifying serial numbers, or credentials collected.', 'Network configuration is not changed. Link speed is not a latency or Internet-speed test.', 'Display rates are driver-reported; verify each monitor in Windows Display settings.', 'No benchmark has been run. This report does not measure input latency or FPS.')
     return ($lines -join "`r`n")
 }
@@ -314,11 +360,30 @@ YOUR APPEARANCE PRESET (SELECTED BY DEFAULT)
   Lock-screen Spotlight rotation/tips are off; no new lock-screen image is chosen.
   Use Settings > Personalization > Lock screen to choose a particular Picture.
 - Restart Windows after Apply or Undo. These registry preferences are not forced
-  into running apps; no Explorer kill, theme change, or wallpaper API adds hidden
+  into running apps; no Explorer kill, theme file, or wallpaper API adds hidden
   changes outside the backup. Settings can vary with Windows releases and policy.
 - Verify Settings > Personalization > Colors, Background, Dynamic Lighting and
   Lock screen after restarting. Apps with their own themes may need manual changes.
 - These are your appearance preferences, not a guaranteed gaming FPS improvement.
+
+VIDEO-BASED OPTIONAL PRESETS
+- Privacy/search: advertising ID, tailored recommendations, Windows welcome/tips,
+  setup prompts, new device search history, account cloud search and search
+  highlights OFF. Existing search history is not deleted. Account-backed Windows
+  Search results can disappear; game/browser networking is not changed.
+- Quiet notifications: app toast notifications OFF. You can miss important alerts;
+  security services and the Windows Security tray are not disabled.
+- Mouse: Enhanced pointer precision and its acceleration thresholds OFF. Pointer
+  speed, DPI, polling rate and game sensitivity stay unchanged. Desktop movement
+  can feel different; raw-input games typically ignore Windows pointer acceleration.
+- All three are opt-in and use the same saved-originals/Undo mechanism. Restart
+  after applying or undoing. Privacy preferences are not an FPS benchmark result.
+- The Video review tab accounts for every transcript section, including manual
+  permissions/diagnostics, Discord overlays, audio, drivers, firmware and BIOS.
+- Game Mode stays ON in the default profile. The video's OFF recommendation is
+  a manual A/B test, not a universal setting for this Ryzen/Windows configuration.
+- Hidden PTU Apply-all, services, game, NVIDIA and paid presets cannot be copied
+  exactly from a transcript that does not disclose their settings.
 
 FORTNITE / RTX 5070
 - Start with NVIDIA Reflex ON in Fortnite. In supported games Reflex manages the
@@ -427,80 +492,145 @@ try {
     Add-Type -AssemblyName System.Drawing
     [Windows.Forms.Application]::EnableVisualStyles()
     $form = New-Object Windows.Forms.Form
-    $form.Text = 'PJ Gaming | 9800X3D + RTX 5070'
-    $form.ClientSize = New-Object Drawing.Size(790, ([Math]::Min(790, [Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 90)))
-    $form.AutoScroll = $true
-    $form.AutoScrollMinSize = New-Object Drawing.Size(770, 780)
+    $form.Text = 'PJ Gaming | 9800X3D + RTX 5070 | Video review'
+    $form.ClientSize = New-Object Drawing.Size(980, ([Math]::Min(900, [Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 80)))
+    $form.MinimumSize = New-Object Drawing.Size(890, 650)
     $form.StartPosition = 'CenterScreen'
-    $form.FormBorderStyle = 'FixedDialog'
-    $form.MaximizeBox = $false
     $form.Font = New-Object Drawing.Font('Segoe UI', 10)
 
-    function Add-Label([string]$Text, [int]$Y, [int]$Height) {
-        $control = New-Object Windows.Forms.Label
-        $control.Text = $Text; $control.Location = New-Object Drawing.Point(20, $Y)
-        $control.Size = New-Object Drawing.Size(750, $Height)
-        $form.Controls.Add($control)
+    $layout = New-Object Windows.Forms.TableLayoutPanel
+    $layout.Dock = 'Fill'; $layout.Padding = New-Object Windows.Forms.Padding(12)
+    $layout.ColumnCount = 1; $layout.RowCount = 7
+    $layout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent, 100))) | Out-Null
+    foreach ($height in @(78, -1, 48, 44, 44, 150, 44)) {
+        if ($height -eq -1) { $style = New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Percent, 100) }
+        else { $style = New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute, $height) }
+        $layout.RowStyles.Add($style) | Out-Null
     }
-    Add-Label 'Your desktop: 9800X3D | RTX 5070 | 32 GB | 1440p 360 Hz | Ethernet | Windows 11' 15 28
-    Add-Label 'Reversible settings. No downloads or admin needed. No guaranteed FPS or latency gain. Network changes are review-only. Defender, updates, services and GPU settings stay as they are.' 48 48
-    $gaming = New-Object Windows.Forms.CheckBox
-    $gaming.Text = 'Enable Game Mode and turn off Windows game recording (Game Bar captures)'
-    $gaming.Checked = $true; $gaming.Location = New-Object Drawing.Point(24, 105)
-    $gaming.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($gaming)
-    $appearance = New-Object Windows.Forms.CheckBox
-    $appearance.Text = 'Dark mode, transparency OFF, Dynamic Lighting OFF, solid BLACK desktop / no Spotlight'
-    $appearance.Checked = $true; $appearance.Location = New-Object Drawing.Point(24, 142)
-    $appearance.Size = New-Object Drawing.Size(740, 48); $form.Controls.Add($appearance)
-    $browsers = New-Object Windows.Forms.CheckBox
-    $browsers.Text = 'Disable Chrome / Edge background apps and Edge Startup Boost'
-    $browsers.Checked = $false; $browsers.Location = New-Object Drawing.Point(24, 202)
-    $browsers.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($browsers)
-    Add-Label 'Adds policies; may show "Managed by your organization". Detected work/school management and existing target policies are skipped. Launch may be slower; background notifications may stop.' 235 52
-    $power = New-Object Windows.Forms.CheckBox
-    $power.Text = 'Use existing High performance power plan (plugged-in desktops only; optional)'
-    $power.Checked = $false; $power.Location = New-Object Drawing.Point(24, 292)
-    $power.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($power)
-    Add-Label 'Start with Balanced on your Ryzen X3D. High performance can increase heat and power use; test it rather than assuming more FPS. Laptops and systems without this plan are skipped.' 325 48
-    Add-Label 'Save work and close browsers/games yourself. Restart Windows after Apply or Undo, including for appearance changes. Lock-screen Spotlight rotation is disabled; desktop becomes solid black.' 380 48
+    $form.Controls.Add($layout)
+    $header = New-Object Windows.Forms.Label
+    $header.Dock = 'Fill'
+    $header.Text = "Your desktop: 9800X3D | RTX 5070 | 32 GB | 1440p 360 Hz | Ethernet | Windows 11`r`nApply needs no downloads or admin; some manual tools need admin. No guaranteed FPS/latency gain.`r`nVideo review explains manual steps, unknown PTU presets and hardware-specific differences."
+    $layout.Controls.Add($header, 0, 0)
 
-    $apply = New-Object Windows.Forms.Button
-    $apply.Text = 'Apply selected settings'; $apply.Location = New-Object Drawing.Point(20, 440)
-    $apply.Size = New-Object Drawing.Size(220, 38); $form.Controls.Add($apply)
-    $undo = New-Object Windows.Forms.Button
-    $undo.Text = 'Undo my changes'; $undo.Location = New-Object Drawing.Point(250, 440)
-    $undo.Size = New-Object Drawing.Size(180, 38); $form.Controls.Add($undo)
-    $report = New-Object Windows.Forms.Button
-    $report.Text = 'Save hardware report'; $report.Location = New-Object Drawing.Point(440, 440)
-    $report.Size = New-Object Drawing.Size(200, 38); $form.Controls.Add($report)
-    $guide = New-Object Windows.Forms.Button
-    $guide.Text = 'Personal gaming + network guide'; $guide.Location = New-Object Drawing.Point(20, 485)
-    $guide.Size = New-Object Drawing.Size(340, 32); $form.Controls.Add($guide)
-    $startup = New-Object Windows.Forms.Button
-    $startup.Text = 'Review startup apps'; $startup.Location = New-Object Drawing.Point(370, 485)
-    $startup.Size = New-Object Drawing.Size(220, 32); $form.Controls.Add($startup)
-    $personalize = New-Object Windows.Forms.Button
-    $personalize.Text = 'Appearance settings'; $personalize.Location = New-Object Drawing.Point(600, 485)
-    $personalize.Size = New-Object Drawing.Size(170, 32); $form.Controls.Add($personalize)
+    $tabs = New-Object Windows.Forms.TabControl
+    $tabs.Dock = 'Fill'
+    $tweaksTab = New-Object Windows.Forms.TabPage
+    $tweaksTab.Text = 'Tweaks'
+    $reviewTab = New-Object Windows.Forms.TabPage
+    $reviewTab.Text = 'Video review / manual steps'
+    $tabs.TabPages.Add($tweaksTab); $tabs.TabPages.Add($reviewTab)
+    $layout.Controls.Add($tabs, 0, 1)
+    $optionsPanel = New-Object Windows.Forms.Panel
+    $optionsPanel.Dock = 'Fill'; $optionsPanel.AutoScroll = $true
+    $optionsPanel.AutoScrollMinSize = New-Object Drawing.Size(820, 650)
+    $tweaksTab.Controls.Add($optionsPanel)
+
+    function Add-Option([string]$Text, [string]$Description, [bool]$Checked, [int]$Y) {
+        $check = New-Object Windows.Forms.CheckBox
+        $check.Text = $Text; $check.Checked = $Checked
+        $check.Location = New-Object Drawing.Point(10, $Y)
+        $check.Size = New-Object Drawing.Size(810, 28)
+        $optionsPanel.Controls.Add($check)
+        $descriptionLabel = New-Object Windows.Forms.Label
+        $descriptionLabel.Text = $Description
+        $descriptionLabel.Location = New-Object Drawing.Point(30, ($Y + 30))
+        $descriptionLabel.Size = New-Object Drawing.Size(790, 52)
+        $optionsPanel.Controls.Add($descriptionLabel)
+        return $check
+    }
+    $gaming = Add-Option 'Gaming: Game Mode ON; Windows game recording OFF' 'Keeps the existing recommended baseline. The video says Game Mode OFF; its manual comparison and HAGS test are explained in Video review. No GPU driver settings are changed.' $true 8
+    $appearance = Add-Option 'Appearance: dark mode; transparency / Dynamic Lighting OFF; solid BLACK desktop' 'Also stops Windows foreground-app lighting control and lock-screen Spotlight rotation/tips. Restart Windows after Apply or Undo. Vendor-controlled RGB and apps with their own themes have separate controls.' $true 100
+    $browsers = Add-Option 'Chrome / Edge: background apps OFF; Edge Startup Boost OFF' 'Optional policies may show "Managed by your organization", slow browser startup or stop closed-browser notifications. Existing target policies and detected managed PCs are skipped. Hardware acceleration stays unchanged.' $false 192
+    $privacy = Add-Option 'Privacy: advertising, recommendations, search history / cloud results / highlights OFF' 'Optional privacy choices can remove account-backed Windows Search results. Existing history is not deleted. Speech, inking dictionaries, diagnostics levels, app permissions and microphone/camera access stay unchanged.' $false 284
+    $notifications = Add-Option 'Quiet desktop: Windows app toast notifications OFF' 'Optional: app notifications and reminders may be missed. This changes your notification preference, not security services or firewall settings. Check Notifications settings after restarting.' $false 376
+    $mouse = Add-Option 'Mouse: Enhance pointer precision OFF (preserve pointer speed)' 'Optional: disables Windows pointer acceleration and its thresholds. Desktop aiming can feel different; modern raw-input games usually ignore this Windows setting. Restart or sign out to apply.' $false 468
+    $power = Add-Option 'Power: use existing High performance plan (AC-powered desktop only)' 'Keep Balanced as your Ryzen X3D starting point. This optional comparison can increase heat and power use. Laptops and PCs without the standard High performance plan are skipped.' $false 560
+
+    $reviewText = New-Object Windows.Forms.TextBox
+    $reviewText.Dock = 'Fill'; $reviewText.Multiline = $true; $reviewText.ReadOnly = $true
+    $reviewText.ScrollBars = 'Vertical'; $reviewText.WordWrap = $true
+    $reviewText.Font = New-Object Drawing.Font('Consolas', 10)
+    try { $reviewText.Text = ((Get-VideoReviewText) -replace '\r?\n', "`r`n") }
+    catch { $reviewText.Text = 'Video review is unavailable: ' + $_.Exception.Message }
+    $reviewTab.Controls.Add($reviewText)
+
+    function New-Button([string]$Text, [int]$Width) {
+        $button = New-Object Windows.Forms.Button
+        $button.Text = $Text; $button.Size = New-Object Drawing.Size($Width, 34)
+        return $button
+    }
+    function New-ButtonRow([int]$Row) {
+        $panel = New-Object Windows.Forms.FlowLayoutPanel
+        $panel.Dock = 'Fill'; $panel.WrapContents = $false
+        $layout.Controls.Add($panel, 0, $Row)
+        return $panel
+    }
+    $actions = New-ButtonRow 2
+    $apply = New-Button 'Apply selected settings' 215; $actions.Controls.Add($apply)
+    $undo = New-Button 'Undo my changes' 175; $actions.Controls.Add($undo)
+    $report = New-Button 'Save hardware report' 195; $actions.Controls.Add($report)
+    $helpers = New-ButtonRow 3
+    $guide = New-Button 'Gaming + network guide' 210; $helpers.Controls.Add($guide)
+    $saveReview = New-Button 'Save video review' 170; $helpers.Controls.Add($saveReview)
+    $startup = New-Button 'Review startup apps' 185; $helpers.Controls.Add($startup)
+    $personalize = New-Button 'Appearance settings' 185; $helpers.Controls.Add($personalize)
+
+    $settingsRow = New-ButtonRow 4
+    $settings = New-Object Windows.Forms.ComboBox
+    $settings.DropDownStyle = 'DropDownList'
+    $settings.Size = New-Object Drawing.Size(570, 32)
+    $settings.DisplayMember = 'Label'
+    $settings.Items.AddRange([object[]]@(
+        [pscustomobject]@{ Label='Notifications'; Kind='Settings'; Value='ms-settings:notifications' },
+        [pscustomobject]@{ Label='Privacy: general / recommendations'; Kind='Settings'; Value='ms-settings:privacy-general' },
+        [pscustomobject]@{ Label='Privacy: online speech (manual)'; Kind='Settings'; Value='ms-settings:privacy-speech' },
+        [pscustomobject]@{ Label='Privacy: inking / typing (dictionary may be cleared)'; Kind='Settings'; Value='ms-settings:privacy-speechtyping' },
+        [pscustomobject]@{ Label='Privacy: diagnostics / feedback (manual)'; Kind='Settings'; Value='ms-settings:privacy-feedback' },
+        [pscustomobject]@{ Label='Windows Search permissions / history'; Kind='Settings'; Value='ms-settings:search-permissions' },
+        [pscustomobject]@{ Label='Windows Search / indexing (Classic review)'; Kind='Settings'; Value='ms-settings:search' },
+        [pscustomobject]@{ Label='Privacy: location (manual)'; Kind='Settings'; Value='ms-settings:privacy-location' },
+        [pscustomobject]@{ Label='Privacy: app diagnostics (manual)'; Kind='Settings'; Value='ms-settings:privacy-appdiagnostics' },
+        [pscustomobject]@{ Label='Privacy: microphone (preserve required voice access)'; Kind='Settings'; Value='ms-settings:privacy-microphone' },
+        [pscustomobject]@{ Label='Privacy: camera (preserve required access)'; Kind='Settings'; Value='ms-settings:privacy-webcam' },
+        [pscustomobject]@{ Label='Graphics / HAGS (manual comparison)'; Kind='Settings'; Value='ms-settings:display-advancedgraphics' },
+        [pscustomobject]@{ Label='Game Mode (manual comparison with video OFF choice)'; Kind='Settings'; Value='ms-settings:gaming-gamemode' },
+        [pscustomobject]@{ Label='Mouse settings'; Kind='Settings'; Value='ms-settings:mousetouchpad' },
+        [pscustomobject]@{ Label='Sound / audio enhancements (manual, device-specific)'; Kind='Settings'; Value='ms-settings:sound' },
+        [pscustomobject]@{ Label='Installed apps (review only; no auto uninstall)'; Kind='Settings'; Value='ms-settings:appsfeatures' },
+        [pscustomobject]@{ Label='Windows Update'; Kind='Settings'; Value='ms-settings:windowsupdate' },
+        [pscustomobject]@{ Label='Your account (no automatic password / sign-in changes)'; Kind='Settings'; Value='ms-settings:yourinfo' },
+        [pscustomobject]@{ Label='Device Manager (driver / adapter review only)'; Kind='DeviceManager'; Value='devmgmt.msc' },
+        [pscustomobject]@{ Label='System Information (motherboard / firmware)'; Kind='Tool'; Value='msinfo32.exe' },
+        [pscustomobject]@{ Label='System Protection (manual restore-point creation)'; Kind='Tool'; Value='SystemPropertiesProtection.exe' }
+    ))
+    $settings.SelectedIndex = 0
+    $settingsRow.Controls.Add($settings)
+    $openSettings = New-Button 'Open selected page' 200; $settingsRow.Controls.Add($openSettings)
+
     $script:OutputBox = New-Object Windows.Forms.TextBox
-    $script:OutputBox.Multiline = $true; $script:OutputBox.ReadOnly = $true
-    $script:OutputBox.ScrollBars = 'Vertical'
-    $script:OutputBox.Location = New-Object Drawing.Point(20, 530)
-    $script:OutputBox.Size = New-Object Drawing.Size(750, 190); $form.Controls.Add($script:OutputBox)
-    Add-Label 'Backup, guide and report: %LOCALAPPDATA%\PJ-Tweaks. Reopen this file to undo.' 735 32
+    $script:OutputBox.Dock = 'Fill'; $script:OutputBox.Multiline = $true
+    $script:OutputBox.ReadOnly = $true; $script:OutputBox.ScrollBars = 'Vertical'
+    $layout.Controls.Add($script:OutputBox, 0, 5)
+    $footer = New-Object Windows.Forms.Label
+    $footer.Dock = 'Fill'
+    $footer.Text = 'Restart after Apply / Undo. Backup: %LOCALAPPDATA%\PJ-Tweaks. Manual game, driver, BIOS and Settings changes are not covered by Undo.'
+    $layout.Controls.Add($footer, 0, 6)
 
-    function Set-ButtonsEnabled([bool]$Enabled) { $apply.Enabled=$Enabled; $undo.Enabled=$Enabled; $report.Enabled=$Enabled }
+    function Set-ButtonsEnabled([bool]$Enabled) {
+        foreach ($button in @($apply, $undo, $report, $guide, $saveReview, $startup, $personalize, $openSettings)) { $button.Enabled=$Enabled }
+    }
     $apply.Add_Click({
         Set-ButtonsEnabled $false
         try {
             $journal = Read-Journal
-            if (-not ($gaming.Checked -or $appearance.Checked -or $browsers.Checked -or $power.Checked)) { Write-Activity 'Select at least one option.'; return }
+            if (-not ($gaming.Checked -or $appearance.Checked -or $browsers.Checked -or $privacy.Checked -or $notifications.Checked -or $mouse.Checked -or $power.Checked)) { Write-Activity 'Select at least one option.'; return }
             $allowBrowsers = $browsers.Checked
             if ($allowBrowsers) {
                 try { if (Test-ManagedDevice) { $allowBrowsers=$false; Write-Activity 'SKIPPED: browser policies on a managed device.' } }
                 catch { $allowBrowsers=$false; Write-Activity ('SKIPPED: could not rule out device management: ' + $_.Exception.Message) }
             }
-            foreach ($spec in (Get-SelectedTweaks $gaming.Checked $appearance.Checked $allowBrowsers)) {
+            foreach ($spec in (Get-SelectedTweaks -Gaming $gaming.Checked -Appearance $appearance.Checked -Browsers $allowBrowsers -Privacy $privacy.Checked -Notifications $notifications.Checked -Mouse $mouse.Checked)) {
                 try { Invoke-RegistryTweak $journal $spec }
                 catch { Write-Activity ('FAILED: {0}: {1}. Backup retained; use Undo if needed.' -f $spec.Label, $_.Exception.Message) }
             }
@@ -513,7 +643,7 @@ try {
                     try { Invoke-PowerTweak $journal } catch { Write-Activity ('FAILED: power plan: ' + $_.Exception.Message) }
                 }
             }
-            Write-Activity 'Finished checking selections. Review APPLIED / SKIPPED / FAILED above. Restart Windows before comparing the same game benchmark.'
+            Write-Activity 'Finished checking selections. Review APPLIED / SKIPPED / FAILED above. Restart Windows before verifying settings and comparing the same game benchmark.'
         } catch { Write-Activity ('STOPPED: ' + $_.Exception.Message) }
         finally { Set-ButtonsEnabled $true }
     })
@@ -549,6 +679,16 @@ try {
             Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"' + $path + '"')
         } catch { Write-Activity ('FAILED: guide: ' + $_.Exception.Message) }
     })
+    $saveReview.Add_Click({
+        try {
+            $folder = Split-Path -Parent $script:StateFile
+            [IO.Directory]::CreateDirectory($folder) | Out-Null
+            $path = Join-Path $folder 'video-review.txt'
+            [IO.File]::WriteAllText($path, (Get-VideoReviewText), [Text.UTF8Encoding]::new($false))
+            Write-Activity ('Video review saved locally: ' + $path)
+            Start-Process -FilePath "$env:SystemRoot\System32\notepad.exe" -ArgumentList ('"' + $path + '"')
+        } catch { Write-Activity ('FAILED: video review: ' + $_.Exception.Message) }
+    })
     $startup.Add_Click({
         try { Start-Process 'ms-settings:startupapps'; Write-Activity 'Opened Windows Startup settings for your review. No startup entries changed.' }
         catch { Write-Activity ('Could not open Startup settings: ' + $_.Exception.Message) }
@@ -557,18 +697,32 @@ try {
         try { Start-Process 'ms-settings:personalization'; Write-Activity 'Opened Windows Personalization settings for verification. Restart first if changes have not appeared yet.' }
         catch { Write-Activity ('Could not open Personalization settings: ' + $_.Exception.Message) }
     })
-    # Theme this window too; the registry preset changes the Windows/app preference.
+    $openSettings.Add_Click({
+        try {
+            $selected = $settings.SelectedItem
+            if ($null -eq $selected) { return }
+            if ($selected.Kind -eq 'Settings') { Start-Process -FilePath $selected.Value }
+            elseif ($selected.Kind -eq 'DeviceManager') {
+                $msc = Join-Path $env:SystemRoot 'System32\devmgmt.msc'
+                Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\mmc.exe') -ArgumentList ('"' + $msc + '"')
+            } else { Start-Process -FilePath (Join-Path $env:SystemRoot ('System32\' + $selected.Value)) }
+            Write-Activity ('Opened for manual review: ' + $selected.Label + '. Changes made there are outside this tool''s Undo.')
+        } catch { Write-Activity ('Could not open the selected page: ' + $_.Exception.Message) }
+    })
+    function Set-DarkControls($Parent) {
+        foreach ($control in $Parent.Controls) {
+            $control.BackColor = [Drawing.Color]::FromArgb(24, 24, 24)
+            $control.ForeColor = [Drawing.Color]::Gainsboro
+            if ($control -is [Windows.Forms.Button]) {
+                $control.FlatStyle = 'Flat'; $control.BackColor = [Drawing.Color]::FromArgb(45, 45, 45)
+            } elseif ($control -is [Windows.Forms.CheckBox]) { $control.UseVisualStyleBackColor = $false }
+            Set-DarkControls $control
+        }
+    }
     $form.BackColor = [Drawing.Color]::FromArgb(24, 24, 24)
     $form.ForeColor = [Drawing.Color]::Gainsboro
-    foreach ($control in $form.Controls) {
-        $control.BackColor = $form.BackColor
-        $control.ForeColor = $form.ForeColor
-        if ($control -is [Windows.Forms.Button]) {
-            $control.FlatStyle = 'Flat'
-            $control.BackColor = [Drawing.Color]::FromArgb(45, 45, 45)
-        } elseif ($control -is [Windows.Forms.CheckBox]) { $control.UseVisualStyleBackColor = $false }
-    }
-    Write-Activity 'Ready. Gaming and your dark / solid-black appearance preset are selected. Choose options, Apply, then restart Windows.'
+    Set-DarkControls $form
+    Write-Activity 'Ready. Gaming and your dark / solid-black appearance preset are selected; other tweaks are optional. The Video review tab accounts for the supplied transcript.'
     [void]$form.ShowDialog()
     $form.Dispose()
 } finally {

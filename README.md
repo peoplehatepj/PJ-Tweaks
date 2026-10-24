@@ -2,7 +2,7 @@
 
 A single-file utility tailored to your Ryzen 7 9800X3D, NVIDIA RTX 5070, 32 GB RAM desktop running Windows 11 Home (reported as 26H2), with a **2560×1440, 360 Hz monitor and Ethernet**. Your main game is Fortnite, with Dead by Daylight, Call of Duty and Uncharted also in mind. The local hardware report can verify your actual Windows build and driver versions.
 
-It runs offline with Windows PowerShell 5.1 and does not require administrator access or install software. FPS and input-delay improvements depend on the game and its settings; the tool does not measure or guarantee either.
+Apply and Undo run offline with Windows PowerShell 5.1 and do not require administrator access or install software. Optional shortcuts open Windows tools/settings for manual review; some of those tools can require administrator access. FPS and input-delay improvements depend on the game and its settings; the tool does not measure or guarantee either.
 
 1. Copy [dist/PJ-Gaming.cmd](dist/PJ-Gaming.cmd) to your Windows PC and double-click it. Keep the `.cmd` extension.
 2. Save your work and close games and browsers yourself.
@@ -16,6 +16,9 @@ The downloaded `.cmd` is self-contained. You do not need the source files, Pytho
 | Gaming | Selected | Enables Game Mode and disables Windows game recording/captures. It does not remove Xbox components or change OBS/NVIDIA/AMD recording. |
 | Appearance | Selected | Turns transparency off, requests Windows/app dark mode, disables Windows Dynamic Lighting, sets the desktop to solid black instead of Spotlight, and turns lock-screen Spotlight rotation/tips off. |
 | Chrome / Edge background activity | Off | Adds per-user policies disabling Chrome background apps, Edge background apps and Edge Startup Boost. Browser hardware acceleration stays as it is. |
+| Privacy / search | Off | Disables advertising ID, tailored recommendations, selected Windows suggestions/welcome/setup prompts, new device search-history recording, account cloud search and search highlights. Existing search history is not deleted. |
+| Quiet notifications | Off | Turns off app toast notifications. Messages, reminders and important alerts may be missed. Security services stay enabled. |
+| Mouse | Off | Turns off Enhance pointer precision and its acceleration thresholds, preserving Windows pointer speed, DPI/polling configuration and game sensitivity. Raw-input games usually ignore this Windows setting. |
 | High performance power plan | Off | Selects the existing standard High performance plan on an AC-powered desktop without a detected battery. It does not create plans or change individual processor settings. |
 
 The browser option can make the browsers display **Managed by your organization**, because it uses policy settings. Existing values for these specific policies are preserved, and PCs detected as managed are skipped. The change may slow browser startup or stop background notifications, and it does not reduce the load of tabs you keep open. Restart browsers after applying it. Undo removes the policy values this tool added.
@@ -23,6 +26,12 @@ The browser option can make the browsers display **Managed by your organization*
 The new **Appearance** option is checked by default. Your final desktop background is **Solid color → Black**; the desktop Picture option is not selected because your final request was for a solid color. Lock-screen Spotlight rotation and tips are switched off without choosing a new lock-screen image. To select a particular lock-screen Picture, use Windows Personalization settings. Restart Windows after Apply or Undo so the shell reloads the preferences. Dark mode applies to Windows and apps that follow its theme; some apps have separate theme settings. The utility's own window is also dark. Windows Dynamic Lighting and foreground-app lighting control are switched off; RGB managed by device firmware or other peripheral software needs its own controls. These appearance choices are not a guaranteed FPS improvement.
 
 After restarting, check **Settings → Personalization → Colors, Background, Dynamic Lighting and Lock screen**. Appearance settings use Windows registry implementation details and can vary by release or be overridden by work/school policy. No wallpaper files, theme caches or existing pictures are deleted. Undo restores the saved preferences and wallpaper path; your existing `backup-v1.json` also works when upgrading from the previous gaming-only version. Keep the latest `.cmd` to undo newly added settings.
+
+The new privacy, notification and mouse options are **off by default**. Read each description and select the choices you want. Cloud-search changes remove Microsoft-account/work results from Windows Search; they do not change Internet connectivity. Online speech, learned typing dictionaries, diagnostics levels, location and other app permissions are reviewed manually. The tool preserves microphone/camera/voice permissions. After applying or undoing, restart Windows and verify the relevant Settings pages; a saved registry value alone does not establish that every toggle on every Windows build changed.
+
+The **Video review / manual steps** tab contains a timestamped review of the [full video transcript](docs/video-review.md) you supplied. It is embedded in the standalone file and works offline. **Save video review** writes `%LOCALAPPDATA%\PJ-Tweaks\video-review.txt`. The dropdown opens specific Settings pages, Device Manager, System Information or System Protection for your review; opening a page does not apply its settings. The hardware report now includes motherboard, BIOS, memory speeds and network-driver details to help choose correct vendor packages.
+
+The video is not copied blindly. Game Mode remains **on** in the default preset; its off recommendation and HAGS changes are manual comparisons. BIOS/EXPO settings, driver/runtime installs, audio enhancements, Discord overlay, uninstalling apps and network-adapter properties need their own review. Intel BIOS values do not apply to your 9800X3D. The transcript does not disclose PTU's Apply-all, service, NVIDIA, Fortnite, power-plan or paid presets, so their contents are **not reproduced**. The review identifies those gaps and corrects misleading recommendations, including removing sign-in protection and forcing Ethernet duplex. Manual changes are outside the utility's Undo.
 
 Keep Windows Balanced as the initial baseline for your 9800X3D. High performance can increase power use and heat without improving frame rates. Treat it as an optional before/after test, and keep it only if repeatable measurements improve. The tool preserves your current plan unless you select the option. Systems without the standard High performance plan are skipped.
 
@@ -44,7 +53,7 @@ Use **Save hardware report** to create:
 %LOCALAPPDATA%\PJ-Tweaks\hardware-report.txt
 ```
 
-The report contains Windows build, CPU, GPU/driver, RAM, driver-reported display information, the active power plan and network adapter link information. It stays on your PC and excludes identifying serial numbers and network addresses. Verify that your monitor is actually running at 2560×1440 and 360 Hz; driver-reported display information can be incomplete. The advertised 0.03 ms panel response is not total input latency. At 360 Hz, one refresh interval is approximately 2.78 ms.
+The report contains Windows build, CPU, GPU/driver, RAM/module speeds, motherboard/revision, BIOS, driver-reported display information, the active power plan, network adapter link information and network-driver versions. It stays on your PC and excludes identifying serial numbers and network addresses. Verify that your monitor is actually running at 2560×1440 and 360 Hz; driver-reported display information can be incomplete. The advertised 0.03 ms panel response is not total input latency. At 360 Hz, one refresh interval is approximately 2.78 ms.
 
 Use **Personal gaming + network guide** to save your hardware-specific recommendations locally:
 
@@ -78,7 +87,7 @@ python3 tools/build.py
 pwsh -NoLogo -NoProfile -File tests/test-core.ps1
 ```
 
-The build also writes `dist/SHA256SUMS.txt`. The PowerShell tests exercise backup and restore logic using simulated Windows state; they do not change real Windows settings. Native Windows GUI, registry integration and gaming benchmarks have not been verified in this Linux development environment. Test the executable on Windows before distributing it more broadly.
+The builder embeds `docs/video-review.md` into the PowerShell payload, then writes the single-file launcher and `dist/SHA256SUMS.txt`. No runtime files or network access are needed on Windows. The PowerShell tests exercise backup and restore logic using simulated Windows state and verify the embedded review and packaged source; they do not change real Windows settings. Native Windows GUI, registry integration and gaming benchmarks have not been verified in this Linux development environment. Test the executable on Windows before distributing it more broadly.
 
 On Windows, run the additional native checks from the repository root:
 

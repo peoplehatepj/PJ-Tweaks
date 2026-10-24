@@ -211,6 +211,68 @@ try {
         Assert-True ((Get-RegistryState $wallpaper.Path $wallpaper.Name).Data -ceq 'C:\Pictures\New choice.jpg') 'later wallpaper choice not overwritten'
         Assert-True ((Read-Journal).Entries[0].Status -eq 'Applied') 'original wallpaper backup retained'
     }
+    Test-Case 'video presets are opt-in and each group can be selected independently' {
+        $default = @(Get-SelectedTweaks $true $true $false)
+        Assert-True (@($default | Where-Object { $_.Group -in @('Privacy','Notifications','Mouse') }).Count -eq 0) 'older/default selectors do not apply new options'
+        $privacy = @(Get-SelectedTweaks -Privacy $true)
+        $quiet = @(Get-SelectedTweaks -Notifications $true)
+        $mouse = @(Get-SelectedTweaks -Mouse $true)
+        Assert-True (($privacy.Count -eq 13) -and (@($privacy | Where-Object { $_.Group -ne 'Privacy' }).Count -eq 0)) 'privacy is selected independently'
+        Assert-True (($quiet.Count -eq 1) -and ($quiet[0].Group -eq 'Notifications')) 'notifications are separate'
+        Assert-True (($mouse.Count -eq 3) -and (@($mouse | Where-Object { $_.Group -ne 'Mouse' }).Count -eq 0)) 'mouse is selected independently'
+    }
+    Test-Case 'privacy recommendations and search preferences restore their original values' {
+        $specs = @(Get-SelectedTweaks -Privacy $true)
+        foreach ($spec in $specs) { Set-Fixture $spec (New-State 1) }
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        foreach ($spec in $specs) { Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -eq 0) ($spec.Id + ' switched off') }
+        $writes = $script:Writes
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        Assert-True ($script:Writes -eq $writes) 'privacy repeat application keeps baseline'
+        Invoke-Undo (Read-Journal)
+        foreach ($spec in $specs) { Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -eq 1) ($spec.Id + ' restored') }
+    }
+    Test-Case 'notification preference is backed up and restores without affecting other preferences' {
+        $spec = @(Get-SelectedTweaks -Notifications $true)[0]
+        Set-Fixture $spec (New-State 1)
+        Invoke-RegistryTweak (Read-Journal) $spec
+        Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -eq 0) 'toast switch off'
+        Assert-True ($script:Registry.Count -eq 1) 'no other preferences changed'
+        Invoke-Undo (Read-Journal)
+        Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -eq 1) 'toast switch restored'
+    }
+    Test-Case 'mouse preset preserves sensitivity and restores prior acceleration thresholds' {
+        $specs = @(Get-SelectedTweaks -Mouse $true)
+        $sensitivity = [pscustomobject]@{ Path='Control Panel\Mouse'; Name='MouseSensitivity' }
+        Set-Fixture $sensitivity (New-State '13' 'String')
+        $baseline = @('1','6','10')
+        for ($i=0; $i -lt $specs.Count; $i++) { Set-Fixture $specs[$i] (New-State $baseline[$i] 'String') }
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        foreach ($spec in $specs) { Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -ceq '0') ($spec.Id + ' off') }
+        Assert-True ((Get-RegistryState $sensitivity.Path $sensitivity.Name).Data -ceq '13') 'pointer speed untouched'
+        Invoke-Undo (Read-Journal)
+        for ($i=0; $i -lt $specs.Count; $i++) { Assert-True ((Get-RegistryState $specs[$i].Path $specs[$i].Name).Data -ceq $baseline[$i]) 'original mouse value restored' }
+        Assert-True ((Get-RegistryState $sensitivity.Path $sensitivity.Name).Data -ceq '13') 'pointer speed still untouched'
+    }
+    Test-Case 'video options can be added to a previous-version backup without losing originals' {
+        Invoke-RegistryTweak (Read-Journal) $game
+        $old = (Read-Journal).Entries[0].Original
+        foreach ($spec in (Get-SelectedTweaks -Privacy $true -Notifications $true -Mouse $true)) { Invoke-RegistryTweak (Read-Journal) $spec }
+        $entry = (Read-Journal).Entries | Where-Object { $_.Id -eq $game.Id }
+        Assert-True (Test-SameState $entry.Original $old) 'old baseline still accessible'
+        Invoke-Undo (Read-Journal)
+        Assert-True ($script:Registry.Count -eq 0) 'old and new values restored together'
+    }
+    Test-Case 'no two catalog entries write the same registry setting or reuse an ID' {
+        $ids=@{}; $locations=@{}
+        foreach ($spec in (Get-TweakCatalog)) {
+            $location=($spec.Path + '|' + $spec.Name).ToLowerInvariant()
+            Assert-True (-not $ids.ContainsKey($spec.Id)) ('unique ID: ' + $spec.Id)
+            Assert-True (-not $locations.ContainsKey($location)) ('unique registry target: ' + $spec.Id)
+            $ids[$spec.Id]=$true; $locations[$location]=$true
+        }
+        Assert-True ($game.Data -eq 1) 'original Game Mode target preserved for backup compatibility'
+    }
     Test-Case 'a backup write failure blocks the corresponding registry change' {
         function Save-Journal($Journal) { throw 'Simulated disk failure' }
         Assert-Throws { Invoke-RegistryTweak (New-Journal) $game } 'apply must fail before mutation'
@@ -292,7 +354,11 @@ try {
         $parts=$content -split '(?m)^::PJ_PAYLOAD_BASE64\r?$'
         Assert-True ($parts.Count -eq 2) 'exactly one payload delimiter'
         $decoded=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[1].Trim()))
-        Assert-True ($decoded -ceq [IO.File]::ReadAllText($source)) 'packaged payload matches reviewed source'
+        $reviewBytes=[IO.File]::ReadAllBytes((Join-Path $root 'docs/video-review.md'))
+        $marker = '$script:EmbeddedVideoReview = ' + "'' # PJ_EMBED_VIDEO_REVIEW"
+        $replacement = '$script:EmbeddedVideoReview = ' + "'" + [Convert]::ToBase64String($reviewBytes) + "' # PJ_EMBED_VIDEO_REVIEW"
+        $expected=[IO.File]::ReadAllText($source).Replace($marker,$replacement)
+        Assert-True ($decoded -ceq $expected) 'packaged payload matches reviewed source plus embedded video review'
         $command=[regex]::Match($parts[0], '(?m)^"%SystemRoot%.*? -Command "(.*)"\r?$').Groups[1].Value
         Assert-True (-not [string]::IsNullOrWhiteSpace($command)) 'launcher found'
         $launcherErrors=$null; $launcherTokens=$null
@@ -303,6 +369,18 @@ try {
         finally { $hash.Dispose() }
         $hashFile=[IO.File]::ReadAllText((Join-Path $root 'dist/SHA256SUMS.txt'))
         Assert-True ($hashFile.StartsWith($actual + '  PJ-Gaming.cmd')) 'distributed checksum correct'
+    }
+    Test-Case 'video review is available offline from both source and standalone payload' {
+        $review=[IO.File]::ReadAllText((Join-Path $root 'docs/video-review.md'))
+        Assert-True ((Get-VideoReviewText) -ceq $review) 'source loads the actual review document'
+        Assert-True ($review.Contains('ulRe_t8ACw0')) 'video source identified'
+        $artifact=[IO.File]::ReadAllText((Join-Path $root 'dist/PJ-Gaming.cmd'))
+        $payload=($artifact -split '(?m)^::PJ_PAYLOAD_BASE64\r?$')[1].Trim()
+        $decoded=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload))
+        & {
+            . ([scriptblock]::Create($decoded)) -LibraryOnly
+            Assert-True ((Get-VideoReviewText) -ceq $review) 'standalone provides exact review without a checkout or Internet'
+        }
     }
     Write-Host ("`n{0} tests passed. Windows registry/power APIs and GUI were mocked or not executed." -f $script:Passed)
 } finally {

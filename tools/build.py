@@ -4,7 +4,13 @@ import base64
 import hashlib
 
 ROOT = Path(__file__).resolve().parents[1]
-payload = base64.b64encode((ROOT / "src" / "PJ-Gaming.ps1").read_bytes()).decode("ascii")
+source = (ROOT / "src" / "PJ-Gaming.ps1").read_text(encoding="utf-8")
+marker = "$script:EmbeddedVideoReview = '' # PJ_EMBED_VIDEO_REVIEW"
+if source.count(marker) != 1:
+    raise ValueError("Expected exactly one offline video-review marker")
+review = base64.b64encode((ROOT / "docs" / "video-review.md").read_bytes()).decode("ascii")
+source = source.replace(marker, f"$script:EmbeddedVideoReview = '{review}' # PJ_EMBED_VIDEO_REVIEW")
+payload = base64.b64encode(source.encode("utf-8")).decode("ascii")
 header = r'''@echo off
 setlocal DisableDelayedExpansion
 title PJ Gaming - Personal Windows Settings
