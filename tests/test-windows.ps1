@@ -1,5 +1,6 @@
 # Native registry smoke tests. Run with Windows PowerShell 5.1 on Windows.
 # Uses ONLY a new randomly named HKCU test key; does not apply the gaming profile.
+param([switch]$ExerciseTimer)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
@@ -43,6 +44,20 @@ try {
     $plan = Get-ActivePowerPlan
     if ($plan -notmatch '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$') { throw 'Native power plan query failed.' }
     Write-Host 'PASS: native read-only power plan query (no plan changed)'
+    $timer=Get-NativeTimerInfo
+    if (($timer.FinestTicks -le 0) -or ($timer.CoarsestTicks -lt $timer.FinestTicks)) { throw 'Native timer bounds invalid.' }
+    Write-Host ('PASS: native read-only timer query; supported range {0:F4}-{1:F4} ms' -f ($timer.FinestTicks / 10000.0), ($timer.CoarsestTicks / 10000.0))
+    if ($ExerciseTimer) {
+        if ((5000 -ge $timer.FinestTicks) -and (5000 -le $timer.CoarsestTicks)) {
+            try {
+                $state=Start-TimerRequest
+                if (-not $state.RequestOwned) { throw 'Native timer ownership not recorded.' }
+                Write-Host ('PASS: native 0.5 ms request accepted; reported {0} ms (not game latency)' -f $state.ReportedMilliseconds)
+            } finally { Stop-TimerRequest | Out-Null }
+            if ($script:TimerRequestOwned) { throw 'Native timer request not released.' }
+            Write-Host 'PASS: native timer request released'
+        } else { Write-Host 'SKIPPED: 0.5 ms outside the native reported range; no request made.' }
+    }
     Write-Host 'Native integration checks passed. Full GUI workflow and game benchmarks still need manual checks.'
 } finally {
     # This exact GUID key was made by the tests and contains no user data.

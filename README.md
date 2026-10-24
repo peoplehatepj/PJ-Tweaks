@@ -13,6 +13,12 @@ The downloaded `.cmd` is self-contained. You do not need the source files, Pytho
 
 For the broader preset, click **Select gaming + background preset**, review its selections, then **Apply selected settings**. It selects Gaming, Appearance, Browsers, Privacy, Mouse and Background together. Notifications and High performance remain off. Existing originals are preserved for Undo. This is the implemented collection of reversible preferences, not a claim that every online registry tweak is useful or included.
 
+For the requested **0.5 ms timer**, open the **Timer 0.5 ms** tab and click **Start 0.5 ms request**. Keep the utility open while testing a game. Click **Stop / release request**, use Undo, or close the utility to release its request. This feature starts **off**, is separate from Apply/the broader preset, and must be started again after reopening the utility or restarting Windows.
+
+The timer uses the internal `NtQueryTimerResolution` / `NtSetTimerResolution` Windows APIs. A request of **5000 units of 100 ns = 0.5 ms** is made only if the reported supported range includes it. The interface shows Windows' returned resolution, which can differ from the request. That number does not establish your game's effective waits, mouse polling or end-to-end input latency. Modern Windows manages effective timer behavior; this does not force every game to use the requested timing. It may increase CPU wakeups, power use and heat. Compare before/after and leave it off unless it helps. Unsupported/blocked requests show an error while the other optimizer features remain available.
+
+No registry timer override, HPET/BCDEdit change, service, driver, startup entry or external timer download is installed. Repeated Start clicks do not stack requests. Stop releases only this process's request; other apps may keep the reported resolution fine, so it does not promise to restore a fixed 15.625 ms value. Timer requests are runtime state, not entries in `backup-v1.json`.
+
 | Option | Default | Effect |
 | --- | --- | --- |
 | Gaming | Selected | Enables Game Mode and disables Windows game recording/captures. It does not remove Xbox components or change OBS/NVIDIA/AMD recording. |
@@ -38,7 +44,7 @@ The video is not copied blindly. Game Mode remains **on** in the default preset;
 
 Keep Windows Balanced as the initial baseline for your 9800X3D. High performance can increase power use and heat without improving frame rates. Treat it as an optional before/after test, and keep it only if repeatable measurements improve. The tool preserves your current plan unless you select the option. Systems without the standard High performance plan are skipped.
 
-You chose networking options for review. The utility provides a local network guide and adapter link information for that review; it does not apply network changes. DNS, TCP settings, network adapters, Defender, firewall, Windows Update and system services are untouched. The tool also leaves GPU driver settings, hardware acceleration, memory settings, HPET and timer settings alone. It does not delete applications, clear browser profiles or forcibly close processes.
+You chose networking options for review. The utility provides a local network guide and adapter link information for that review; it does not apply network changes. DNS, TCP settings, network adapters, Defender, firewall, Windows Update and system services are untouched. The tool also leaves GPU driver settings, hardware acceleration, memory settings, HPET and boot-time timer configuration alone. The optional runtime timer request is described above. It does not delete applications, clear browser profiles or forcibly close processes.
 
 To undo, reopen the same `.cmd` under the same Windows account and click **Undo my changes**, then restart Windows. Original values, their types and the original power plan are recorded before changes in:
 
@@ -88,9 +94,10 @@ For development, edit `src/PJ-Gaming.ps1` and rebuild the launcher with Python's
 ```sh
 python3 tools/build.py
 pwsh -NoLogo -NoProfile -File tests/test-core.ps1
+pwsh -NoLogo -NoProfile -File tests/test-timer.ps1
 ```
 
-The builder embeds `docs/video-review.md` into the PowerShell payload, then writes the single-file launcher and `dist/SHA256SUMS.txt`. No runtime files or network access are needed on Windows. The PowerShell tests exercise backup and restore logic using simulated Windows state and verify the embedded review and packaged source; they do not change real Windows settings. Native Windows GUI, registry integration and gaming benchmarks have not been verified in this Linux development environment. Test the executable on Windows before distributing it more broadly.
+The builder embeds `docs/video-review.md` into the PowerShell payload, then writes the single-file launcher and `dist/SHA256SUMS.txt`. No runtime files or network access are needed on Windows. The PowerShell tests exercise backup/restore and timer lifecycle logic using simulated Windows state and verify the embedded review and packaged source. Timer tests compile the interop declaration but mock the native calls; no operating-system timer is changed. Native Windows GUI, timer/registry integration and gaming benchmarks have not been verified in this Linux development environment. Test the executable on Windows before distributing it more broadly.
 
 On Windows, run the additional native checks from the repository root:
 
@@ -98,4 +105,4 @@ On Windows, run the additional native checks from the repository root:
 powershell.exe -NoProfile -STA -File tests/test-windows.ps1
 ```
 
-These checks round-trip values in a randomly named temporary test key, load Windows Forms and query the current power plan without changing it. They do not apply the gaming profile or automate the complete interface. They have not been executed in the Linux workspace.
+These checks round-trip values in a randomly named temporary test key, load Windows Forms, query the current power plan and read native timer bounds. They do not apply the gaming profile or automate the complete interface. To also exercise a real paired timer acquisition/release on Windows, use `-ExerciseTimer`; it skips the request if 0.5 ms is outside the reported range. These native checks have not been executed in the Linux workspace.

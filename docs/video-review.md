@@ -83,6 +83,8 @@ Implemented means an explicit setting is in this utility. Optional means you cho
 
 ## What Apply and Undo cover
 
+The later Timer 0.5 ms tab is an addition requested separately, not a disclosed PTU preset from this transcript. It optionally requests 0.5 ms at runtime while the utility stays open; Stop, Undo or closing releases this process's request. It starts off, creates no permanent timer/boot configuration, and does not establish a game's effective timing or latency. Windows' returned resolution may differ, and other apps may retain their own requests. Compare real game behavior before keeping it active.
+
 An additional Background option requests no automatic reopening of restartable apps at sign-in and no Windows suggested-app silent installs. This is an explicit addition to the reviewed transcript. Select gaming + background preset selects Gaming, Appearance, Browsers, Privacy, Mouse and Background, leaving notifications and power-plan options off. Ordinary startup programs and running processes are not automatically disabled. Support for these preferences varies by Windows release; verify their behavior after restarting.
 
 Apply changes only the selected, explicitly listed settings. Privacy, Quiet, Mouse, Browsers and power-plan choices are optional; review their descriptions before applying. Appearance and Gaming remain the default starting profile. Restart Windows afterward and verify the relevant Settings pages.

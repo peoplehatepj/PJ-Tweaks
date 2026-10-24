@@ -6,6 +6,99 @@ $script:StateFile = $null
 $script:UserSid = $null
 $script:OutputBox = $null
 $script:EmbeddedVideoReview = '' # PJ_EMBED_VIDEO_REVIEW
+$script:TimerRequestOwned = $false
+$script:TimerLastReportedTicks = $null
+
+function Initialize-TimerNative {
+    if ($null -ne ('PJGaming.TimerNative' -as [type])) { return }
+    # Internal NT API: optional and lazy, so an unavailable API cannot break Apply.
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace PJGaming {
+    public static class TimerNative {
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        public static extern int NtQueryTimerResolution(
+            out uint minimumResolution, out uint maximumResolution, out uint currentResolution);
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        public static extern int NtSetTimerResolution(
+            uint desiredResolution, [MarshalAs(UnmanagedType.U1)] bool setResolution,
+            out uint currentResolution);
+    }
+}
+'@
+}
+
+function Get-NativeTimerInfo {
+    Initialize-TimerNative
+    [uint32]$first = 0; [uint32]$second = 0; [uint32]$current = 0
+    $status = [PJGaming.TimerNative]::NtQueryTimerResolution([ref]$first, [ref]$second, [ref]$current)
+    if ($status -lt 0) { throw ('Timer query failed (NTSTATUS {0}).' -f $status) }
+    if (($first -eq 0) -or ($second -eq 0)) { throw 'Windows did not report a valid timer range.' }
+    [pscustomobject]@{
+        FinestTicks=[Math]::Min($first, $second)
+        CoarsestTicks=[Math]::Max($first, $second)
+        ReportedTicks=$current
+    }
+}
+
+function Set-NativeTimerRequest([uint32]$DesiredTicks, [bool]$Enable) {
+    Initialize-TimerNative
+    [uint32]$current = 0
+    $status = [PJGaming.TimerNative]::NtSetTimerResolution($DesiredTicks, $Enable, [ref]$current)
+    if ($status -lt 0) { throw ('Timer request failed (NTSTATUS {0}).' -f $status) }
+    # Do not throw on a returned-value mismatch after a successful acquisition.
+    # The owner must record the successful request and release it later.
+    return $current
+}
+
+function Get-TimerStatus([switch]$Refresh) {
+    if ($Refresh) {
+        $info = Get-NativeTimerInfo
+        $script:TimerLastReportedTicks = $info.ReportedTicks
+    }
+    $reportedMs = $null
+    if (($null -ne $script:TimerLastReportedTicks) -and ($script:TimerLastReportedTicks -gt 0)) {
+        $reportedMs = [double]$script:TimerLastReportedTicks / 10000.0
+    }
+    [pscustomobject]@{
+        RequestOwned=[bool]$script:TimerRequestOwned
+        RequestedMilliseconds=0.5
+        ReportedMilliseconds=$reportedMs
+    }
+}
+
+function Start-TimerRequest {
+    if ($script:TimerRequestOwned) { return (Get-TimerStatus) }
+    $info = Get-NativeTimerInfo
+    # NT units are 100 ns: 5000 * 100 ns = 0.5 ms, not 5 ms.
+    if ((5000 -lt $info.FinestTicks) -or (5000 -gt $info.CoarsestTicks)) {
+        throw ('A 0.5 ms request is outside the reported range ({0:F4}-{1:F4} ms). No request made.' -f ($info.FinestTicks / 10000.0), ($info.CoarsestTicks / 10000.0))
+    }
+    $current = Set-NativeTimerRequest -DesiredTicks 5000 -Enable $true
+    $script:TimerRequestOwned = $true
+    $script:TimerLastReportedTicks = $current
+    return (Get-TimerStatus)
+}
+
+function Stop-TimerRequest {
+    if (-not $script:TimerRequestOwned) { return (Get-TimerStatus) }
+    $current = Set-NativeTimerRequest -DesiredTicks 5000 -Enable $false
+    # Keep ownership on failure so Stop or closing the window can retry.
+    $script:TimerRequestOwned = $false
+    $script:TimerLastReportedTicks = $current
+    return (Get-TimerStatus)
+}
+
+function Format-TimerStatus($Status) {
+    $ownership = 'No timer request is active in this utility.'
+    if ($Status.RequestOwned) { $ownership = 'This utility holds a 0.5 ms timer request. Keep this window open.' }
+    $reported = 'Windows reported resolution: not queried.'
+    if ($null -ne $Status.ReportedMilliseconds) {
+        $reported = 'Windows reported resolution: ' + ([double]$Status.ReportedMilliseconds).ToString('F4', [Globalization.CultureInfo]::InvariantCulture) + ' ms.'
+    }
+    return ($ownership + "`r`n" + $reported + "`r`nReported resolution does not establish game timing or input latency.")
+}
 
 function Write-Activity([string]$Message) {
     $line = ('[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $Message)
@@ -14,7 +107,7 @@ function Write-Activity([string]$Message) {
 }
 
 function Get-TweakCatalog {
-    # Windows exposes these game settings in Settings > Gaming. No timer/driver hacks.
+    # Registry preferences only. The optional runtime timer is separate.
     @(
         [pscustomobject]@{ Id='game-mode'; Group='Gaming'; Label='Game Mode'; Path='Software\Microsoft\GameBar'; Name='AutoGameModeEnabled'; Kind='DWord'; Data=1 },
         [pscustomobject]@{ Id='capture'; Group='Gaming'; Label='Windows game recording'; Path='Software\Microsoft\Windows\CurrentVersion\GameDVR'; Name='AppCaptureEnabled'; Kind='DWord'; Data=0 },
@@ -400,6 +493,19 @@ BROADER GAMING + BACKGROUND PRESET
 - This is the complete set this utility actually implements, not every registry
   tweak circulated online. Essential services and device/game support stay enabled.
 
+OPTIONAL 0.5 MS RUNTIME TIMER
+- Open the Timer 0.5 ms tab and click Start 0.5 ms request. Keep the utility open
+  while comparing gameplay. Stop / release request or closing the window releases
+  only this utility's request. Undo also releases it. Nothing auto-starts at boot.
+- This uses the internal NT timer API, not a registry value, service, driver or
+  BCDEdit/HPET setting. If 0.5 ms is outside Windows' reported range, it is skipped.
+- The displayed resolution is what Windows reports, not a measurement of game
+  waits, mouse polling, frame times or input latency. It may differ from 0.5 ms.
+  Other apps can keep fine timer requests active even after this utility stops.
+- Modern Windows manages timer behavior; this does not force every game to use
+  0.5 ms waits. A finer request may increase CPU wakeups, power and heat. Leave it
+  off unless a repeatable before/after comparison helps your actual game.
+
 FORTNITE / RTX 5070
 - Start with NVIDIA Reflex ON in Fortnite. In supported games Reflex manages the
   queue; do not assume forcing NVIDIA Control Panel Low Latency Mode Ultra on top
@@ -482,7 +588,7 @@ HOW TO CHECK WHETHER A CHANGE HELPS
 
 SECURITY AND RECOVERY
 No service disabling, debloating, security/Defender changes, update changes,
-overclocking, BIOS changes, network writes, timers/HPET/BCDEdit changes, downloads,
+overclocking, BIOS changes, network writes, persistent timer/HPET/BCDEdit changes, downloads,
 account changes, data cleanup, automatic restart or forced application closing.
 The saved backup is per Windows account: %LOCALAPPDATA%\PJ-Tweaks\backup-v1.json.
 Keep it for Undo. Undo skips settings changed later by another app or by you.
@@ -534,7 +640,9 @@ try {
     $tweaksTab.Text = 'Tweaks'
     $reviewTab = New-Object Windows.Forms.TabPage
     $reviewTab.Text = 'Video review / manual steps'
-    $tabs.TabPages.Add($tweaksTab); $tabs.TabPages.Add($reviewTab)
+    $timerTab = New-Object Windows.Forms.TabPage
+    $timerTab.Text = 'Timer 0.5 ms'
+    $tabs.TabPages.Add($tweaksTab); $tabs.TabPages.Add($reviewTab); $tabs.TabPages.Add($timerTab)
     $layout.Controls.Add($tabs, 0, 1)
     $optionsPanel = New-Object Windows.Forms.Panel
     $optionsPanel.Dock = 'Fill'; $optionsPanel.AutoScroll = $true
@@ -571,6 +679,21 @@ try {
     catch { $reviewText.Text = 'Video review is unavailable: ' + $_.Exception.Message }
     $reviewTab.Controls.Add($reviewText)
 
+    $timerPanel = New-Object Windows.Forms.Panel
+    $timerPanel.Dock = 'Fill'; $timerPanel.AutoScroll = $true
+    $timerPanel.AutoScrollMinSize = New-Object Drawing.Size(820, 405)
+    $timerTab.Controls.Add($timerPanel)
+    $timerDescription = New-Object Windows.Forms.Label
+    $timerDescription.Location = New-Object Drawing.Point(16, 16)
+    $timerDescription.Size = New-Object Drawing.Size(800, 190)
+    $timerDescription.Text = "Optional runtime experiment, OFF by default. Start requests 0.5 ms from Windows for this utility's process; keep this window open while testing. Stop, Undo or closing this window releases our request.`r`n`r`nThis does not force every game to use 0.5 ms timing. The reported value is not input latency, mouse polling or measured FPS. A finer request may increase CPU wakeups, power use and heat. Compare the same game before/after and stop if it does not help.`r`n`r`nUses an internal Windows API. Unsupported or blocked requests show an error without changing registry/boot settings. No service, download, startup task or permanent timer override is installed."
+    $timerPanel.Controls.Add($timerDescription)
+    $timerStateLabel = New-Object Windows.Forms.Label
+    $timerStateLabel.Location = New-Object Drawing.Point(16, 220)
+    $timerStateLabel.Size = New-Object Drawing.Size(800, 85)
+    $timerStateLabel.Text = Format-TimerStatus (Get-TimerStatus)
+    $timerPanel.Controls.Add($timerStateLabel)
+
     function New-Button([string]$Text, [int]$Width) {
         $button = New-Object Windows.Forms.Button
         $button.Text = $Text; $button.Size = New-Object Drawing.Size($Width, 34)
@@ -582,6 +705,12 @@ try {
         $layout.Controls.Add($panel, 0, $Row)
         return $panel
     }
+    $timerStart = New-Button 'Start 0.5 ms request' 235
+    $timerStart.Location = New-Object Drawing.Point(16, 335); $timerPanel.Controls.Add($timerStart)
+    $timerStop = New-Button 'Stop / release request' 235
+    $timerStop.Location = New-Object Drawing.Point(265, 335); $timerPanel.Controls.Add($timerStop)
+    $timerRefresh = New-Button 'Refresh reported status' 245
+    $timerRefresh.Location = New-Object Drawing.Point(515, 335); $timerPanel.Controls.Add($timerRefresh)
     $actions = New-ButtonRow 2
     $actions.WrapContents = $true
     $apply = New-Button 'Apply selected settings' 215; $actions.Controls.Add($apply)
@@ -636,8 +765,28 @@ try {
     $layout.Controls.Add($footer, 0, 6)
 
     function Set-ButtonsEnabled([bool]$Enabled) {
-        foreach ($button in @($apply, $undo, $report, $preset, $guide, $saveReview, $startup, $personalize, $openSettings)) { $button.Enabled=$Enabled }
+        foreach ($button in @($apply, $undo, $report, $preset, $guide, $saveReview, $startup, $personalize, $openSettings, $timerStart, $timerStop, $timerRefresh)) { $button.Enabled=$Enabled }
     }
+    $timerStart.Add_Click({
+        try {
+            $state = Start-TimerRequest
+            $timerStateLabel.Text = Format-TimerStatus $state
+            Write-Activity ('Timer: ' + (($timerStateLabel.Text -replace '\r?\n', ' ')))
+        } catch {
+            $timerStateLabel.Text = Format-TimerStatus (Get-TimerStatus)
+            Write-Activity ('TIMER FAILED: ' + $_.Exception.Message)
+        }
+    })
+    $timerStop.Add_Click({
+        try {
+            $timerStateLabel.Text = Format-TimerStatus (Stop-TimerRequest)
+            Write-Activity 'Timer: this utility holds no request. Other apps can still affect the reported resolution.'
+        } catch { Write-Activity ('TIMER RELEASE FAILED: ' + $_.Exception.Message + ' Try Stop again or close the utility.') }
+    })
+    $timerRefresh.Add_Click({
+        try { $timerStateLabel.Text = Format-TimerStatus (Get-TimerStatus -Refresh) }
+        catch { Write-Activity ('TIMER QUERY FAILED: ' + $_.Exception.Message) }
+    })
     $preset.Add_Click({
         $gaming.Checked=$true; $appearance.Checked=$true; $browsers.Checked=$true
         $privacy.Checked=$true; $mouse.Checked=$true; $background.Checked=$true
@@ -675,6 +824,8 @@ try {
     $undo.Add_Click({
         Set-ButtonsEnabled $false
         try {
+            try { $timerStateLabel.Text = Format-TimerStatus (Stop-TimerRequest) }
+            catch { Write-Activity ('TIMER RELEASE FAILED: ' + $_.Exception.Message + ' Use Stop or close the utility to retry.') }
             if (-not [IO.File]::Exists($script:StateFile)) { Write-Activity 'No saved changes found for this Windows account.'; return }
             Invoke-Undo (Read-Journal)
             Write-Activity 'Undo pass finished. Review RESTORED / SKIPPED UNDO / FAILED UNDO above. Restart Windows.'
@@ -749,8 +900,19 @@ try {
     Set-DarkControls $form
     Write-Activity 'Ready. Gaming and your dark / solid-black appearance preset are selected; other tweaks are optional. The Video review tab accounts for the supplied transcript.'
     [void]$form.ShowDialog()
+    if ($script:TimerRequestOwned) {
+        try { Stop-TimerRequest | Out-Null }
+        catch { Write-Host ('Timer release failed; retrying on exit: ' + $_.Exception.Message) }
+    }
     $form.Dispose()
 } finally {
-    if ($locked) { $mutex.ReleaseMutex() }
-    $mutex.Dispose()
+    try {
+        if ($script:TimerRequestOwned) {
+            try { Stop-TimerRequest | Out-Null }
+            catch { Write-Host ('Timer cleanup failed: ' + $_.Exception.Message + ' Windows releases process requests when this process exits.') }
+        }
+    } finally {
+        if ($locked) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
 }
