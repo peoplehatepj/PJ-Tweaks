@@ -273,6 +273,19 @@ try {
         }
         Assert-True ($game.Data -eq 1) 'original Game Mode target preserved for backup compatibility'
     }
+    Test-Case 'background options are separate, reversible and preserve previous-version originals' {
+        Assert-True (@(Get-SelectedTweaks $true $true $true).Where({$_.Group -eq 'Background'}).Count -eq 0) 'background remains opt-in'
+        $specs = @(Get-SelectedTweaks -Background $true)
+        Assert-True ($specs.Count -eq 2) 'two explicit background preferences'
+        Invoke-RegistryTweak (Read-Journal) $game
+        foreach ($spec in $specs) { Set-Fixture $spec (New-State 1); Invoke-RegistryTweak (Read-Journal) $spec }
+        $writes=$script:Writes
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        Assert-True ($script:Writes -eq $writes) 'repeated application preserves baseline'
+        Invoke-Undo (Read-Journal)
+        foreach ($spec in $specs) { Assert-True ((Get-RegistryState $spec.Path $spec.Name).Data -eq 1) ('original restored: ' + $spec.Id) }
+        Assert-True (-not (Get-RegistryState $game.Path $game.Name).Exists) 'previous-version original restored'
+    }
     Test-Case 'a backup write failure blocks the corresponding registry change' {
         function Save-Journal($Journal) { throw 'Simulated disk failure' }
         Assert-Throws { Invoke-RegistryTweak (New-Journal) $game } 'apply must fail before mutation'

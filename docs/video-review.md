@@ -83,6 +83,8 @@ Implemented means an explicit setting is in this utility. Optional means you cho
 
 ## What Apply and Undo cover
 
+An additional Background option requests no automatic reopening of restartable apps at sign-in and no Windows suggested-app silent installs. This is an explicit addition to the reviewed transcript. Select gaming + background preset selects Gaming, Appearance, Browsers, Privacy, Mouse and Background, leaving notifications and power-plan options off. Ordinary startup programs and running processes are not automatically disabled. Support for these preferences varies by Windows release; verify their behavior after restarting.
+
 Apply changes only the selected, explicitly listed settings. Privacy, Quiet, Mouse, Browsers and power-plan choices are optional; review their descriptions before applying. Appearance and Gaming remain the default starting profile. Restart Windows afterward and verify the relevant Settings pages.
 
 The per-account backup records original registry values and types, plus any selected power-plan change. Repeated applications retain active originals. Undo skips values changed later outside this tool instead of overwriting the newer choice. Keep the backup and the latest utility file.

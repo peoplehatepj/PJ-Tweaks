@@ -49,6 +49,8 @@ function Get-TweakCatalog {
         [pscustomobject]@{ Id='mouse-acceleration'; Group='Mouse'; Label='Enhanced pointer precision OFF'; Path='Control Panel\Mouse'; Name='MouseSpeed'; Kind='String'; Data='0' },
         [pscustomobject]@{ Id='mouse-threshold-one'; Group='Mouse'; Label='Pointer acceleration threshold 1 OFF'; Path='Control Panel\Mouse'; Name='MouseThreshold1'; Kind='String'; Data='0' },
         [pscustomobject]@{ Id='mouse-threshold-two'; Group='Mouse'; Label='Pointer acceleration threshold 2 OFF'; Path='Control Panel\Mouse'; Name='MouseThreshold2'; Kind='String'; Data='0' },
+        [pscustomobject]@{ Id='restart-apps'; Group='Background'; Label='Automatic restart of restartable apps after sign-in OFF'; Path='Software\Microsoft\Windows NT\CurrentVersion\Winlogon'; Name='RestartApps'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='suggested-app-installation'; Group='Background'; Label='Windows suggested-app silent installation OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SilentInstalledAppsEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='chrome-background'; Group='Browsers'; Label='Chrome background apps'; Path='Software\Policies\Google\Chrome'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-background'; Group='Browsers'; Label='Edge background apps'; Path='Software\Policies\Microsoft\Edge'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-startup'; Group='Browsers'; Label='Edge Startup Boost'; Path='Software\Policies\Microsoft\Edge'; Name='StartupBoostEnabled'; Kind='DWord'; Data=0 }
@@ -56,14 +58,15 @@ function Get-TweakCatalog {
 }
 
 function Get-SelectedTweaks([bool]$Gaming, [bool]$Appearance, [bool]$Browsers,
-    [bool]$Privacy=$false, [bool]$Notifications=$false, [bool]$Mouse=$false) {
+    [bool]$Privacy=$false, [bool]$Notifications=$false, [bool]$Mouse=$false, [bool]$Background=$false) {
     Get-TweakCatalog | Where-Object {
         (($_.Group -eq 'Gaming') -and $Gaming) -or
         (($_.Group -eq 'Appearance') -and $Appearance) -or
         (($_.Group -eq 'Browsers') -and $Browsers) -or
         (($_.Group -eq 'Privacy') -and $Privacy) -or
         (($_.Group -eq 'Notifications') -and $Notifications) -or
-        (($_.Group -eq 'Mouse') -and $Mouse)
+        (($_.Group -eq 'Mouse') -and $Mouse) -or
+        (($_.Group -eq 'Background') -and $Background)
     }
 }
 
@@ -385,6 +388,18 @@ VIDEO-BASED OPTIONAL PRESETS
 - Hidden PTU Apply-all, services, game, NVIDIA and paid presets cannot be copied
   exactly from a transcript that does not disclose their settings.
 
+BROADER GAMING + BACKGROUND PRESET
+- The Select gaming + background preset button selects Gaming, Appearance,
+  Browsers, Privacy, Mouse and Background. It does not apply until you click Apply.
+- Background requests that restartable apps not reopen automatically at sign-in,
+  and switches off Windows suggested-app silent installation. It does not uninstall
+  apps, block security updates, disable ordinary startup entries or kill processes.
+- Notifications and the power plan remain unselected in this preset. Review all
+  choices before applying. Browser policies, cloud-search changes and mouse feel
+  have the tradeoffs described above. Registry support varies by Windows build.
+- This is the complete set this utility actually implements, not every registry
+  tweak circulated online. Essential services and device/game support stay enabled.
+
 FORTNITE / RTX 5070
 - Start with NVIDIA Reflex ON in Fortnite. In supported games Reflex manages the
   queue; do not assume forcing NVIDIA Control Panel Low Latency Mode Ultra on top
@@ -502,7 +517,7 @@ try {
     $layout.Dock = 'Fill'; $layout.Padding = New-Object Windows.Forms.Padding(12)
     $layout.ColumnCount = 1; $layout.RowCount = 7
     $layout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle([Windows.Forms.SizeType]::Percent, 100))) | Out-Null
-    foreach ($height in @(78, -1, 48, 44, 44, 150, 44)) {
+    foreach ($height in @(78, -1, 90, 44, 44, 150, 44)) {
         if ($height -eq -1) { $style = New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Percent, 100) }
         else { $style = New-Object Windows.Forms.RowStyle([Windows.Forms.SizeType]::Absolute, $height) }
         $layout.RowStyles.Add($style) | Out-Null
@@ -523,7 +538,7 @@ try {
     $layout.Controls.Add($tabs, 0, 1)
     $optionsPanel = New-Object Windows.Forms.Panel
     $optionsPanel.Dock = 'Fill'; $optionsPanel.AutoScroll = $true
-    $optionsPanel.AutoScrollMinSize = New-Object Drawing.Size(820, 650)
+    $optionsPanel.AutoScrollMinSize = New-Object Drawing.Size(820, 750)
     $tweaksTab.Controls.Add($optionsPanel)
 
     function Add-Option([string]$Text, [string]$Description, [bool]$Checked, [int]$Y) {
@@ -546,6 +561,7 @@ try {
     $notifications = Add-Option 'Quiet desktop: Windows app toast notifications OFF' 'Optional: app notifications and reminders may be missed. This changes your notification preference, not security services or firewall settings. Check Notifications settings after restarting.' $false 376
     $mouse = Add-Option 'Mouse: Enhance pointer precision OFF (preserve pointer speed)' 'Optional: disables Windows pointer acceleration and its thresholds. Desktop aiming can feel different; modern raw-input games usually ignore this Windows setting. Restart or sign out to apply.' $false 468
     $power = Add-Option 'Power: use existing High performance plan (AC-powered desktop only)' 'Keep Balanced as your Ryzen X3D starting point. This optional comparison can increase heat and power use. Laptops and PCs without the standard High performance plan are skipped.' $false 560
+    $background = Add-Option 'Background: restartable apps after sign-in and suggested-app installs OFF' 'Stops automatic reopening of restartable apps and requests no suggested-app silent installs. Does not disable normal startup entries, uninstall apps or stop running processes. Restart and verify your Windows settings.' $false 652
 
     $reviewText = New-Object Windows.Forms.TextBox
     $reviewText.Dock = 'Fill'; $reviewText.Multiline = $true; $reviewText.ReadOnly = $true
@@ -567,9 +583,11 @@ try {
         return $panel
     }
     $actions = New-ButtonRow 2
+    $actions.WrapContents = $true
     $apply = New-Button 'Apply selected settings' 215; $actions.Controls.Add($apply)
     $undo = New-Button 'Undo my changes' 175; $actions.Controls.Add($undo)
     $report = New-Button 'Save hardware report' 195; $actions.Controls.Add($report)
+    $preset = New-Button 'Select gaming + background preset' 315; $actions.Controls.Add($preset)
     $helpers = New-ButtonRow 3
     $guide = New-Button 'Gaming + network guide' 210; $helpers.Controls.Add($guide)
     $saveReview = New-Button 'Save video review' 170; $helpers.Controls.Add($saveReview)
@@ -618,19 +636,26 @@ try {
     $layout.Controls.Add($footer, 0, 6)
 
     function Set-ButtonsEnabled([bool]$Enabled) {
-        foreach ($button in @($apply, $undo, $report, $guide, $saveReview, $startup, $personalize, $openSettings)) { $button.Enabled=$Enabled }
+        foreach ($button in @($apply, $undo, $report, $preset, $guide, $saveReview, $startup, $personalize, $openSettings)) { $button.Enabled=$Enabled }
     }
+    $preset.Add_Click({
+        $gaming.Checked=$true; $appearance.Checked=$true; $browsers.Checked=$true
+        $privacy.Checked=$true; $mouse.Checked=$true; $background.Checked=$true
+        $notifications.Checked=$false; $power.Checked=$false
+        $tabs.SelectedTab=$tweaksTab
+        Write-Activity 'Selected Gaming, Appearance, Browsers, Privacy, Mouse and Background. Review descriptions; click Apply to change settings. Notifications and power plan are not selected.'
+    })
     $apply.Add_Click({
         Set-ButtonsEnabled $false
         try {
             $journal = Read-Journal
-            if (-not ($gaming.Checked -or $appearance.Checked -or $browsers.Checked -or $privacy.Checked -or $notifications.Checked -or $mouse.Checked -or $power.Checked)) { Write-Activity 'Select at least one option.'; return }
+            if (-not ($gaming.Checked -or $appearance.Checked -or $browsers.Checked -or $privacy.Checked -or $notifications.Checked -or $mouse.Checked -or $power.Checked -or $background.Checked)) { Write-Activity 'Select at least one option.'; return }
             $allowBrowsers = $browsers.Checked
             if ($allowBrowsers) {
                 try { if (Test-ManagedDevice) { $allowBrowsers=$false; Write-Activity 'SKIPPED: browser policies on a managed device.' } }
                 catch { $allowBrowsers=$false; Write-Activity ('SKIPPED: could not rule out device management: ' + $_.Exception.Message) }
             }
-            foreach ($spec in (Get-SelectedTweaks -Gaming $gaming.Checked -Appearance $appearance.Checked -Browsers $allowBrowsers -Privacy $privacy.Checked -Notifications $notifications.Checked -Mouse $mouse.Checked)) {
+            foreach ($spec in (Get-SelectedTweaks -Gaming $gaming.Checked -Appearance $appearance.Checked -Browsers $allowBrowsers -Privacy $privacy.Checked -Notifications $notifications.Checked -Mouse $mouse.Checked -Background $background.Checked)) {
                 try { Invoke-RegistryTweak $journal $spec }
                 catch { Write-Activity ('FAILED: {0}: {1}. Backup retained; use Undo if needed.' -f $spec.Label, $_.Exception.Message) }
             }

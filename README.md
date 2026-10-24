@@ -11,6 +11,8 @@ Apply and Undo run offline with Windows PowerShell 5.1 and do not require admini
 
 The downloaded `.cmd` is self-contained. You do not need the source files, Python or a separate PowerShell download on your PC.
 
+For the broader preset, click **Select gaming + background preset**, review its selections, then **Apply selected settings**. It selects Gaming, Appearance, Browsers, Privacy, Mouse and Background together. Notifications and High performance remain off. Existing originals are preserved for Undo. This is the implemented collection of reversible preferences, not a claim that every online registry tweak is useful or included.
+
 | Option | Default | Effect |
 | --- | --- | --- |
 | Gaming | Selected | Enables Game Mode and disables Windows game recording/captures. It does not remove Xbox components or change OBS/NVIDIA/AMD recording. |
@@ -19,6 +21,7 @@ The downloaded `.cmd` is self-contained. You do not need the source files, Pytho
 | Privacy / search | Off | Disables advertising ID, tailored recommendations, selected Windows suggestions/welcome/setup prompts, new device search-history recording, account cloud search and search highlights. Existing search history is not deleted. |
 | Quiet notifications | Off | Turns off app toast notifications. Messages, reminders and important alerts may be missed. Security services stay enabled. |
 | Mouse | Off | Turns off Enhance pointer precision and its acceleration thresholds, preserving Windows pointer speed, DPI/polling configuration and game sensitivity. Raw-input games usually ignore this Windows setting. |
+| Background | Off | Disables automatic reopening of restartable apps after sign-in and requests no Windows suggested-app silent installs. Does not uninstall existing apps, disable ordinary startup entries or kill running processes. |
 | High performance power plan | Off | Selects the existing standard High performance plan on an AC-powered desktop without a detected battery. It does not create plans or change individual processor settings. |
 
 The browser option can make the browsers display **Managed by your organization**, because it uses policy settings. Existing values for these specific policies are preserved, and PCs detected as managed are skipped. The change may slow browser startup or stop background notifications, and it does not reduce the load of tabs you keep open. Restart browsers after applying it. Undo removes the policy values this tool added.
