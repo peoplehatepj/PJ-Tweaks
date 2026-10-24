@@ -147,6 +147,70 @@ try {
         Assert-True ($script:Registry.Count -eq 0) 'all added policy values removed'
         Assert-True ($script:Writes -eq 6) 'three writes and three restores'
     }
+    Test-Case 'appearance selection is separate from gaming and browser tweaks' {
+        $selected = @(Get-SelectedTweaks $false $true $false)
+        Assert-True ($selected.Count -gt 0) 'appearance options selected'
+        Assert-True (@($selected | Where-Object { $_.Group -ne 'Appearance' }).Count -eq 0) 'no unselected group applied'
+        Assert-True (@(Get-SelectedTweaks $true $false $false).Count -eq 3) 'existing gaming preset unchanged'
+        Assert-True (@(Get-SelectedTweaks $false $false $false).Count -eq 0) 'no selection yields no tweaks'
+    }
+    Test-Case 'appearance preset disables effects and Spotlight and chooses dark solid-black desktop' {
+        $specs = @(Get-SelectedTweaks $false $true $false)
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        foreach ($id in @('transparency','app-dark-mode','system-dark-mode','dynamic-lighting','foreground-lighting','lockscreen-spotlight','lockscreen-overlay','lockscreen-tips')) {
+            $spec = $specs | Where-Object { $_.Id -eq $id }
+            $state = Get-RegistryState $spec.Path $spec.Name
+            Assert-True ($state.Exists -and ($state.Kind -eq 'DWord') -and ($state.Data -eq 0)) ($id + ' disabled')
+        }
+        $mode = $specs | Where-Object { $_.Id -eq 'background-type' }
+        Assert-True ((Get-RegistryState $mode.Path $mode.Name).Data -eq 1) 'solid color selected, not picture/Spotlight'
+        $wallpaper = $specs | Where-Object { $_.Id -eq 'desktop-wallpaper' }
+        Assert-True ((Get-RegistryState $wallpaper.Path $wallpaper.Name).Data -ceq '') 'wallpaper cleared'
+        $color = $specs | Where-Object { $_.Id -eq 'background-color' }
+        Assert-True ((Get-RegistryState $color.Path $color.Name).Data -ceq '0 0 0') 'black background selected'
+        Invoke-Undo (Read-Journal)
+        Assert-True ($script:Registry.Count -eq 0) 'all added appearance values removed by Undo'
+    }
+    Test-Case 'appearance reruns preserve original wallpaper, color, theme and lighting state' {
+        $specs = @(Get-SelectedTweaks $false $true $false)
+        $before = @{}
+        foreach ($spec in $specs) {
+            $data = 1
+            if ($spec.Kind -eq 'String') { $data = 'old-value' }
+            if ($spec.Id -eq 'background-type') { $data = 3 }
+            if ($spec.Id -eq 'desktop-wallpaper') { $data = 'C:\Users\Player\Pictures\My Wallpaper.jpg' }
+            if ($spec.Id -eq 'background-color') { $data = '24 60 120' }
+            $state = New-State $data $spec.Kind
+            $before[$spec.Id] = $state
+            Set-Fixture $spec $state
+        }
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        $firstWrites = $script:Writes
+        foreach ($spec in $specs) { Invoke-RegistryTweak (Read-Journal) $spec }
+        Assert-True ($script:Writes -eq $firstWrites) 'appearance repeat Apply performs no extra writes'
+        Invoke-Undo (Read-Journal)
+        foreach ($spec in $specs) {
+            Assert-True (Test-SameState (Get-RegistryState $spec.Path $spec.Name) $before[$spec.Id]) ('original restored: ' + $spec.Id)
+        }
+    }
+    Test-Case 'old gaming-only backup is compatible when adding appearance preferences' {
+        Invoke-RegistryTweak (Read-Journal) $game
+        $baseline = (Read-Journal).Entries[0].Original
+        foreach ($spec in (Get-SelectedTweaks $false $true $false)) { Invoke-RegistryTweak (Read-Journal) $spec }
+        $journal = Read-Journal
+        $oldEntry = $journal.Entries | Where-Object { $_.Id -eq $game.Id }
+        Assert-True (Test-SameState $oldEntry.Original $baseline) 'old original not replaced during upgrade'
+        Invoke-Undo $journal
+        Assert-True ($script:Registry.Count -eq 0) 'old and new preset changes undone together'
+    }
+    Test-Case 'Undo preserves a wallpaper selected later outside the optimizer' {
+        $wallpaper = Get-TweakCatalog | Where-Object { $_.Id -eq 'desktop-wallpaper' }
+        Invoke-RegistryTweak (Read-Journal) $wallpaper
+        Set-Fixture $wallpaper (New-State 'C:\Pictures\New choice.jpg' 'String')
+        Invoke-Undo (Read-Journal)
+        Assert-True ((Get-RegistryState $wallpaper.Path $wallpaper.Name).Data -ceq 'C:\Pictures\New choice.jpg') 'later wallpaper choice not overwritten'
+        Assert-True ((Read-Journal).Entries[0].Status -eq 'Applied') 'original wallpaper backup retained'
+    }
     Test-Case 'a backup write failure blocks the corresponding registry change' {
         function Save-Journal($Journal) { throw 'Simulated disk failure' }
         Assert-Throws { Invoke-RegistryTweak (New-Journal) $game } 'apply must fail before mutation'

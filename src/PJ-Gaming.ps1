@@ -18,10 +18,31 @@ function Get-TweakCatalog {
         [pscustomobject]@{ Id='game-mode'; Group='Gaming'; Label='Game Mode'; Path='Software\Microsoft\GameBar'; Name='AutoGameModeEnabled'; Kind='DWord'; Data=1 },
         [pscustomobject]@{ Id='capture'; Group='Gaming'; Label='Windows game recording'; Path='Software\Microsoft\Windows\CurrentVersion\GameDVR'; Name='AppCaptureEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='game-dvr'; Group='Gaming'; Label='Game DVR recording'; Path='System\GameConfigStore'; Name='GameDVR_Enabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='transparency'; Group='Appearance'; Label='Transparency effects OFF'; Path='Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'; Name='EnableTransparency'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='app-dark-mode'; Group='Appearance'; Label='App dark mode'; Path='Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'; Name='AppsUseLightTheme'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='system-dark-mode'; Group='Appearance'; Label='Windows dark mode'; Path='Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'; Name='SystemUsesLightTheme'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='dynamic-lighting'; Group='Appearance'; Label='Windows Dynamic Lighting OFF'; Path='Software\Microsoft\Lighting'; Name='AmbientLightingEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='foreground-lighting'; Group='Appearance'; Label='Foreground-app lighting control OFF'; Path='Software\Microsoft\Lighting'; Name='ControlledByForegroundApp'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='background-type'; Group='Appearance'; Label='Desktop background: Solid color (not Spotlight)'; Path='Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers'; Name='BackgroundType'; Kind='DWord'; Data=1 },
+        [pscustomobject]@{ Id='desktop-wallpaper'; Group='Appearance'; Label='Desktop picture disabled for solid color'; Path='Control Panel\Desktop'; Name='Wallpaper'; Kind='String'; Data='' },
+        [pscustomobject]@{ Id='wallpaper-style'; Group='Appearance'; Label='Wallpaper style reset for solid background'; Path='Control Panel\Desktop'; Name='WallpaperStyle'; Kind='String'; Data='0' },
+        [pscustomobject]@{ Id='wallpaper-tile'; Group='Appearance'; Label='Wallpaper tiling OFF'; Path='Control Panel\Desktop'; Name='TileWallpaper'; Kind='String'; Data='0' },
+        [pscustomobject]@{ Id='background-color'; Group='Appearance'; Label='Solid background color: black'; Path='Control Panel\Colors'; Name='Background'; Kind='String'; Data='0 0 0' },
+        [pscustomobject]@{ Id='lockscreen-spotlight'; Group='Appearance'; Label='Lock-screen Spotlight rotation OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='RotatingLockScreenEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='lockscreen-overlay'; Group='Appearance'; Label='Lock-screen Spotlight tips OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='RotatingLockScreenOverlayEnabled'; Kind='DWord'; Data=0 },
+        [pscustomobject]@{ Id='lockscreen-tips'; Group='Appearance'; Label='Lock-screen fun facts and suggestions OFF'; Path='Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name='SubscribedContent-338387Enabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='chrome-background'; Group='Browsers'; Label='Chrome background apps'; Path='Software\Policies\Google\Chrome'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-background'; Group='Browsers'; Label='Edge background apps'; Path='Software\Policies\Microsoft\Edge'; Name='BackgroundModeEnabled'; Kind='DWord'; Data=0 },
         [pscustomobject]@{ Id='edge-startup'; Group='Browsers'; Label='Edge Startup Boost'; Path='Software\Policies\Microsoft\Edge'; Name='StartupBoostEnabled'; Kind='DWord'; Data=0 }
     )
+}
+
+function Get-SelectedTweaks([bool]$Gaming, [bool]$Appearance, [bool]$Browsers) {
+    Get-TweakCatalog | Where-Object {
+        (($_.Group -eq 'Gaming') -and $Gaming) -or
+        (($_.Group -eq 'Appearance') -and $Appearance) -or
+        (($_.Group -eq 'Browsers') -and $Browsers)
+    }
 }
 
 function Get-RegistryState([string]$Path, [string]$Name, [switch]$Machine) {
@@ -284,6 +305,21 @@ START HERE
 - If your Windows release no longer receives security updates, update to a
   supported release. This optimizer does not disable or change Windows Update.
 
+YOUR APPEARANCE PRESET (SELECTED BY DEFAULT)
+- Transparency effects OFF; Windows and supported apps use dark mode.
+- Windows Dynamic Lighting and foreground-app lighting control OFF. RGB controlled
+  by device firmware or third-party
+  peripheral software may need switching off in that software separately.
+- Desktop background is Solid color, BLACK, rather than Picture or Spotlight.
+  Lock-screen Spotlight rotation/tips are off; no new lock-screen image is chosen.
+  Use Settings > Personalization > Lock screen to choose a particular Picture.
+- Restart Windows after Apply or Undo. These registry preferences are not forced
+  into running apps; no Explorer kill, theme change, or wallpaper API adds hidden
+  changes outside the backup. Settings can vary with Windows releases and policy.
+- Verify Settings > Personalization > Colors, Background, Dynamic Lighting and
+  Lock screen after restarting. Apps with their own themes may need manual changes.
+- These are your appearance preferences, not a guaranteed gaming FPS improvement.
+
 FORTNITE / RTX 5070
 - Start with NVIDIA Reflex ON in Fortnite. In supported games Reflex manages the
   queue; do not assume forcing NVIDIA Control Panel Low Latency Mode Ultra on top
@@ -392,9 +428,9 @@ try {
     [Windows.Forms.Application]::EnableVisualStyles()
     $form = New-Object Windows.Forms.Form
     $form.Text = 'PJ Gaming | 9800X3D + RTX 5070'
-    $form.ClientSize = New-Object Drawing.Size(790, ([Math]::Min(730, [Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 90)))
+    $form.ClientSize = New-Object Drawing.Size(790, ([Math]::Min(790, [Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 90)))
     $form.AutoScroll = $true
-    $form.AutoScrollMinSize = New-Object Drawing.Size(775, 720)
+    $form.AutoScrollMinSize = New-Object Drawing.Size(770, 780)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
@@ -412,56 +448,61 @@ try {
     $gaming.Text = 'Enable Game Mode and turn off Windows game recording (Game Bar captures)'
     $gaming.Checked = $true; $gaming.Location = New-Object Drawing.Point(24, 105)
     $gaming.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($gaming)
+    $appearance = New-Object Windows.Forms.CheckBox
+    $appearance.Text = 'Dark mode, transparency OFF, Dynamic Lighting OFF, solid BLACK desktop / no Spotlight'
+    $appearance.Checked = $true; $appearance.Location = New-Object Drawing.Point(24, 142)
+    $appearance.Size = New-Object Drawing.Size(740, 48); $form.Controls.Add($appearance)
     $browsers = New-Object Windows.Forms.CheckBox
     $browsers.Text = 'Disable Chrome / Edge background apps and Edge Startup Boost'
-    $browsers.Checked = $false; $browsers.Location = New-Object Drawing.Point(24, 142)
+    $browsers.Checked = $false; $browsers.Location = New-Object Drawing.Point(24, 202)
     $browsers.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($browsers)
-    Add-Label 'Adds policies; may show "Managed by your organization". Detected work/school management and existing target policies are skipped. Launch may be slower; background notifications may stop.' 175 52
+    Add-Label 'Adds policies; may show "Managed by your organization". Detected work/school management and existing target policies are skipped. Launch may be slower; background notifications may stop.' 235 52
     $power = New-Object Windows.Forms.CheckBox
     $power.Text = 'Use existing High performance power plan (plugged-in desktops only; optional)'
-    $power.Checked = $false; $power.Location = New-Object Drawing.Point(24, 232)
+    $power.Checked = $false; $power.Location = New-Object Drawing.Point(24, 292)
     $power.Size = New-Object Drawing.Size(740, 28); $form.Controls.Add($power)
-    Add-Label 'Start with Balanced on your Ryzen X3D. High performance can increase heat and power use; test it rather than assuming more FPS. Laptops and systems without this plan are skipped.' 265 48
-    Add-Label 'Save work and close browsers/games yourself before applying. Restart Windows afterward. Undo restores saved values unless something else has since changed them.' 320 48
+    Add-Label 'Start with Balanced on your Ryzen X3D. High performance can increase heat and power use; test it rather than assuming more FPS. Laptops and systems without this plan are skipped.' 325 48
+    Add-Label 'Save work and close browsers/games yourself. Restart Windows after Apply or Undo, including for appearance changes. Lock-screen Spotlight rotation is disabled; desktop becomes solid black.' 380 48
 
     $apply = New-Object Windows.Forms.Button
-    $apply.Text = 'Apply selected settings'; $apply.Location = New-Object Drawing.Point(20, 380)
+    $apply.Text = 'Apply selected settings'; $apply.Location = New-Object Drawing.Point(20, 440)
     $apply.Size = New-Object Drawing.Size(220, 38); $form.Controls.Add($apply)
     $undo = New-Object Windows.Forms.Button
-    $undo.Text = 'Undo my changes'; $undo.Location = New-Object Drawing.Point(250, 380)
+    $undo.Text = 'Undo my changes'; $undo.Location = New-Object Drawing.Point(250, 440)
     $undo.Size = New-Object Drawing.Size(180, 38); $form.Controls.Add($undo)
     $report = New-Object Windows.Forms.Button
-    $report.Text = 'Save hardware report'; $report.Location = New-Object Drawing.Point(440, 380)
+    $report.Text = 'Save hardware report'; $report.Location = New-Object Drawing.Point(440, 440)
     $report.Size = New-Object Drawing.Size(200, 38); $form.Controls.Add($report)
     $guide = New-Object Windows.Forms.Button
-    $guide.Text = 'Personal gaming + network guide'; $guide.Location = New-Object Drawing.Point(20, 425)
+    $guide.Text = 'Personal gaming + network guide'; $guide.Location = New-Object Drawing.Point(20, 485)
     $guide.Size = New-Object Drawing.Size(340, 32); $form.Controls.Add($guide)
     $startup = New-Object Windows.Forms.Button
-    $startup.Text = 'Review startup apps'; $startup.Location = New-Object Drawing.Point(370, 425)
+    $startup.Text = 'Review startup apps'; $startup.Location = New-Object Drawing.Point(370, 485)
     $startup.Size = New-Object Drawing.Size(220, 32); $form.Controls.Add($startup)
+    $personalize = New-Object Windows.Forms.Button
+    $personalize.Text = 'Appearance settings'; $personalize.Location = New-Object Drawing.Point(600, 485)
+    $personalize.Size = New-Object Drawing.Size(170, 32); $form.Controls.Add($personalize)
     $script:OutputBox = New-Object Windows.Forms.TextBox
     $script:OutputBox.Multiline = $true; $script:OutputBox.ReadOnly = $true
     $script:OutputBox.ScrollBars = 'Vertical'
-    $script:OutputBox.Location = New-Object Drawing.Point(20, 470)
+    $script:OutputBox.Location = New-Object Drawing.Point(20, 530)
     $script:OutputBox.Size = New-Object Drawing.Size(750, 190); $form.Controls.Add($script:OutputBox)
-    Add-Label 'Backup, guide and report: %LOCALAPPDATA%\PJ-Tweaks. Reopen this file to undo.' 675 32
+    Add-Label 'Backup, guide and report: %LOCALAPPDATA%\PJ-Tweaks. Reopen this file to undo.' 735 32
 
     function Set-ButtonsEnabled([bool]$Enabled) { $apply.Enabled=$Enabled; $undo.Enabled=$Enabled; $report.Enabled=$Enabled }
     $apply.Add_Click({
         Set-ButtonsEnabled $false
         try {
             $journal = Read-Journal
-            if (-not ($gaming.Checked -or $browsers.Checked -or $power.Checked)) { Write-Activity 'Select at least one option.'; return }
+            if (-not ($gaming.Checked -or $appearance.Checked -or $browsers.Checked -or $power.Checked)) { Write-Activity 'Select at least one option.'; return }
             $allowBrowsers = $browsers.Checked
             if ($allowBrowsers) {
                 try { if (Test-ManagedDevice) { $allowBrowsers=$false; Write-Activity 'SKIPPED: browser policies on a managed device.' } }
                 catch { $allowBrowsers=$false; Write-Activity ('SKIPPED: could not rule out device management: ' + $_.Exception.Message) }
             }
-            foreach ($spec in (Get-TweakCatalog)) {
-                if ((($spec.Group -eq 'Gaming') -and $gaming.Checked) -or (($spec.Group -eq 'Browsers') -and $allowBrowsers)) {
-                    try { Invoke-RegistryTweak $journal $spec }
-                    catch { Write-Activity ('FAILED: {0}: {1}. Backup retained; use Undo if needed.' -f $spec.Label, $_.Exception.Message) }
-                }
+            foreach ($spec in (Get-SelectedTweaks $gaming.Checked $appearance.Checked $allowBrowsers)) {
+                try { Invoke-RegistryTweak $journal $spec }
+                catch { Write-Activity ('FAILED: {0}: {1}. Backup retained; use Undo if needed.' -f $spec.Label, $_.Exception.Message) }
             }
             if ($power.Checked) {
                 $battery = [Windows.Forms.SystemInformation]::PowerStatus
@@ -512,7 +553,22 @@ try {
         try { Start-Process 'ms-settings:startupapps'; Write-Activity 'Opened Windows Startup settings for your review. No startup entries changed.' }
         catch { Write-Activity ('Could not open Startup settings: ' + $_.Exception.Message) }
     })
-    Write-Activity 'Ready. Defaults change Game Mode and game recording only. Choose optional settings, then Apply.'
+    $personalize.Add_Click({
+        try { Start-Process 'ms-settings:personalization'; Write-Activity 'Opened Windows Personalization settings for verification. Restart first if changes have not appeared yet.' }
+        catch { Write-Activity ('Could not open Personalization settings: ' + $_.Exception.Message) }
+    })
+    # Theme this window too; the registry preset changes the Windows/app preference.
+    $form.BackColor = [Drawing.Color]::FromArgb(24, 24, 24)
+    $form.ForeColor = [Drawing.Color]::Gainsboro
+    foreach ($control in $form.Controls) {
+        $control.BackColor = $form.BackColor
+        $control.ForeColor = $form.ForeColor
+        if ($control -is [Windows.Forms.Button]) {
+            $control.FlatStyle = 'Flat'
+            $control.BackColor = [Drawing.Color]::FromArgb(45, 45, 45)
+        } elseif ($control -is [Windows.Forms.CheckBox]) { $control.UseVisualStyleBackColor = $false }
+    }
+    Write-Activity 'Ready. Gaming and your dark / solid-black appearance preset are selected. Choose options, Apply, then restart Windows.'
     [void]$form.ShowDialog()
     $form.Dispose()
 } finally {

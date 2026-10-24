@@ -14,10 +14,15 @@ The downloaded `.cmd` is self-contained. You do not need the source files, Pytho
 | Option | Default | Effect |
 | --- | --- | --- |
 | Gaming | Selected | Enables Game Mode and disables Windows game recording/captures. It does not remove Xbox components or change OBS/NVIDIA/AMD recording. |
+| Appearance | Selected | Turns transparency off, requests Windows/app dark mode, disables Windows Dynamic Lighting, sets the desktop to solid black instead of Spotlight, and turns lock-screen Spotlight rotation/tips off. |
 | Chrome / Edge background activity | Off | Adds per-user policies disabling Chrome background apps, Edge background apps and Edge Startup Boost. Browser hardware acceleration stays as it is. |
 | High performance power plan | Off | Selects the existing standard High performance plan on an AC-powered desktop without a detected battery. It does not create plans or change individual processor settings. |
 
 The browser option can make the browsers display **Managed by your organization**, because it uses policy settings. Existing values for these specific policies are preserved, and PCs detected as managed are skipped. The change may slow browser startup or stop background notifications, and it does not reduce the load of tabs you keep open. Restart browsers after applying it. Undo removes the policy values this tool added.
+
+The new **Appearance** option is checked by default. Your final desktop background is **Solid color → Black**; the desktop Picture option is not selected because your final request was for a solid color. Lock-screen Spotlight rotation and tips are switched off without choosing a new lock-screen image. To select a particular lock-screen Picture, use Windows Personalization settings. Restart Windows after Apply or Undo so the shell reloads the preferences. Dark mode applies to Windows and apps that follow its theme; some apps have separate theme settings. The utility's own window is also dark. Windows Dynamic Lighting and foreground-app lighting control are switched off; RGB managed by device firmware or other peripheral software needs its own controls. These appearance choices are not a guaranteed FPS improvement.
+
+After restarting, check **Settings → Personalization → Colors, Background, Dynamic Lighting and Lock screen**. Appearance settings use Windows registry implementation details and can vary by release or be overridden by work/school policy. No wallpaper files, theme caches or existing pictures are deleted. Undo restores the saved preferences and wallpaper path; your existing `backup-v1.json` also works when upgrading from the previous gaming-only version. Keep the latest `.cmd` to undo newly added settings.
 
 Keep Windows Balanced as the initial baseline for your 9800X3D. High performance can increase power use and heat without improving frame rates. Treat it as an optional before/after test, and keep it only if repeatable measurements improve. The tool preserves your current plan unless you select the option. Systems without the standard High performance plan are skipped.
 
